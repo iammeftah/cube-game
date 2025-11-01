@@ -1,24 +1,54 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import * as SplashScreen from 'expo-splash-screen';
+import { useEffect } from 'react';
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  useEffect(() => {
+    async function prepare() {
+      try {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (e) {
+        console.warn(e);
+      } finally {
+        await SplashScreen.hideAsync();
+      }
+    }
+
+    prepare();
+  }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
+    <Stack 
+      screenOptions={{ 
+        headerShown: false,
+        animation: 'fade',
+        animationDuration: 600,
+        contentStyle: { backgroundColor: '#000000' },
+        gestureEnabled: false,
+      }}
+    >
+      <Stack.Screen 
+        name="index"
+        options={{
+          animation: 'none',
+        }}
+      />
+      <Stack.Screen 
+        name="landing"
+        options={{
+          animation: 'fade',
+          animationDuration: 600,
+        }}
+      />
+      <Stack.Screen 
+        name="game"
+        options={{
+          animation: 'fade',
+          animationDuration: 800,
+        }}
+      />
+    </Stack>
   );
 }
