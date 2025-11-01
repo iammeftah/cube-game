@@ -18,21 +18,27 @@ export class PlayerController {
   private startLaneX: number = 0;
   private targetLaneX: number = 0;
   
-  // Subtle hover effect for visual appeal
-  private hoverTime: number = 0;
+  // Jump rotation
+  private isJumping: boolean = false;
+  private startRotationX: number = 0;
+  private jumpStartTime: number = 0;
+  private jumpDuration: number = 0;
   
   // Collision tracking
   private timeOffPath: number = 0;
   private hasCommittedToFall: boolean = false;
   
   // Constants
-  private readonly FALL_GRACE_PERIOD = 150; // Slightly more forgiving grace period
-  private readonly LANE_SWITCH_SMOOTHNESS = 0.18; // Smooth lane transitions
-  private readonly HOVER_AMPLITUDE = 0.08; // Subtle floating effect
-  private readonly HOVER_SPEED = 3.5; // Speed of hover animation
+  private readonly FALL_GRACE_PERIOD = 150;
+  private readonly LANE_SWITCH_SMOOTHNESS = 0.18;
   
   constructor(player: THREE.Mesh) {
     this.player = player;
+  }
+
+  updatePlayerReference(newPlayer: THREE.Mesh): void {
+    this.player = newPlayer;
+    console.log('PlayerController: Player reference updated');
   }
 
   dropOntoPath(): Promise<void> {
@@ -81,7 +87,8 @@ export class PlayerController {
     this.hasCommittedToFall = false;
     this.laneChangeProgress = 0;
     this.isChangingLane = false;
-    this.hoverTime = 0;
+    this.isJumping = false;
+    this.jumpStartTime = 0;
     // Clean slate - no rotation
     this.player.rotation.set(0, 0, 0);
     console.log('Player activated, lane:', this.currentLane);
@@ -120,12 +127,20 @@ export class PlayerController {
   }
 
   handleJump(): void {
-    if (!this.isActive || this.hasCommittedToFall) return;
+    if (!this.isActive || this.hasCommittedToFall || this.isJumping) return;
     
-    // Remove the isGrounded check - allow jump anytime player is on a tile
-    console.log('JUMPING! Grounded:', this.isGrounded, 'VelocityY:', this.velocityY);
+    console.log('JUMPING! Starting front flip animation');
     this.velocityY = GAME_CONFIG.PLAYER.JUMP_FORCE;
     this.isGrounded = false;
+    this.isJumping = true;
+    this.jumpStartTime = Date.now();
+    this.startRotationX = this.player.rotation.x;
+    
+    // Calculate jump duration based on gravity and jump force
+    // Time to go up and come down: t = 2 * v / g
+    this.jumpDuration = (2 * GAME_CONFIG.PLAYER.JUMP_FORCE / GAME_CONFIG.PLAYER.GRAVITY) * 16.67; // Convert to milliseconds
+    
+    console.log('Jump duration:', this.jumpDuration, 'ms');
   }
 
   setPathCurveOffset(offset: number): void {
@@ -164,33 +179,45 @@ export class PlayerController {
   updateRotation(): void {
     if (!this.isActive) return;
 
-    if (this.isGrounded && !this.hasCommittedToFall) {
-      // SLIDING PHYSICS - Box sliding on floor, not rolling
+    // Handle front flip during jump
+    if (this.isJumping) {
+      const elapsed = Date.now() - this.jumpStartTime;
+      const progress = Math.min(elapsed / this.jumpDuration, 1);
       
-      // NO forward rolling - keep X rotation stable
+      // Perform one complete forward rotation (360 degrees = 2π radians)
+      this.player.rotation.x = this.startRotationX + (Math.PI * 2 * progress);
+      this.player.rotation.x = -this.player.rotation.x; // Forward flip
+      
+      console.log('Jump progress:', (progress * 100).toFixed(1), '% - Rotation:', (this.player.rotation.x / Math.PI).toFixed(2), 'π');
+      
+      // If we've landed and completed the rotation
+      if (this.isGrounded && progress >= 0.5) {
+        console.log('Front flip completed on landing');
+        this.isJumping = false;
+        // Snap to exact rotation to avoid drift
+        this.player.rotation.x = Math.round(this.player.rotation.x / (Math.PI * 2)) * Math.PI * 2;
+      }
+    } else if (this.isGrounded && !this.hasCommittedToFall) {
+      // STEADY - No rotation while moving forward on ground
+      // Keep cube completely stable
       this.player.rotation.x = 0;
+      this.player.rotation.y = 0;
       
       // Slight tilt in direction of lane change (like pushing a box)
       if (this.isChangingLane) {
         const tiltDirection = this.targetLane > this.currentLane ? 1 : -1;
-        const tiltAmount = this.laneChangeProgress * 0.08; // Subtle tilt
+        const tiltAmount = this.laneChangeProgress * 0.08;
         this.player.rotation.z = tiltDirection * tiltAmount * Math.sin(this.laneChangeProgress * Math.PI);
       } else {
         // Smoothly return to neutral position
         this.player.rotation.z *= 0.85;
       }
       
-      // Very subtle Y rotation for visual interest (not spinning)
-      this.player.rotation.y += 0.003;
-      
     } else if (this.hasCommittedToFall) {
       // Realistic tumbling when falling
       this.player.rotation.x += 0.15;
       this.player.rotation.y += 0.08;
       this.player.rotation.z += 0.12;
-    } else if (!this.isGrounded) {
-      // In air (jumping) - maintain orientation
-      // Just keep current rotation, no spinning
     }
   }
 
@@ -235,6 +262,8 @@ export class PlayerController {
           this.isGrounded = true;
           this.velocityY = 0;
           this.isFalling = false;
+          
+          // Front flip will complete in updateRotation based on landing
         } else {
           // Fell through - check grace period
           if (this.timeOffPath > this.FALL_GRACE_PERIOD) {
@@ -246,7 +275,9 @@ export class PlayerController {
         }
       }
     } else {
-      // Currently grounded
+      // Currently grounded - keep position steady
+      this.player.position.y = groundY; // Lock to ground position to prevent vibration
+      
       if (!collisionCheck.onPath) {
         // Just stepped off platform
         if (this.timeOffPath > this.FALL_GRACE_PERIOD) {
@@ -261,9 +292,6 @@ export class PlayerController {
           this.isGrounded = false;
           this.velocityY = -0.05;
         }
-      } else {
-        // On path - maintain height
-        this.player.position.y = groundY;
       }
     }
 
@@ -290,12 +318,6 @@ export class PlayerController {
     return this.currentLane;
   }
 
-  // Add this method inside the PlayerController class (after the constructor)
-  updatePlayerReference(newPlayer: THREE.Mesh): void {
-    this.player = newPlayer;
-    console.log('PlayerController: Player reference updated');
-  }
-
   reset(): void {
     this.player.position.set(0, GAME_CONFIG.PLAYER.INITIAL_Y, 0);
     this.player.rotation.set(0, 0, 0);
@@ -311,6 +333,7 @@ export class PlayerController {
     this.isChangingLane = false;
     this.timeOffPath = 0;
     this.hasCommittedToFall = false;
-    this.hoverTime = 0;
+    this.isJumping = false;
+    this.jumpStartTime = 0;
   }
 }

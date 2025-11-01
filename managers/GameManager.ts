@@ -135,11 +135,16 @@ export class GameManager {
       
       this.animationManager.updateTime();
 
+      // In the startAnimationLoop method, find this section and update it:
       if (this.player && this.gameState === 'landing') {
-        // Only gentle floating animation on landing screen - no rotation
+        // REMOVED: rotation animation on landing screen
+        // Only gentle floating animation - cube stays perfectly still rotationally
         this.player.position.y = GAME_CONFIG.PLAYER.INITIAL_Y + 
           Math.sin(this.animationManager.getTime() * GAME_CONFIG.PLAYER.BOUNCE_SPEED) * 
           GAME_CONFIG.PLAYER.BOUNCE_AMPLITUDE;
+        
+        // Keep rotation locked at zero
+        this.player.rotation.set(0, 0, 0);
       }
 
       if (this.particles) {

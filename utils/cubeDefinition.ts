@@ -21,14 +21,14 @@ export const CUBE_TYPES: Record<string, CubeDefinition> = {
     name: 'Crimson',
     size: 1.0,
     material: {
-      color: 0xcc0000,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
+      color: 0xff2222, // Brighter red
+      emissive: 0x440000,
+      emissiveIntensity: 0.3,
       metalness: 0.3,
-      roughness: 0.7,
+      roughness: 0.6,
     },
-    edgeColor: 0xff0000,
-    edgeOpacity: 0.8,
+    edgeColor: 0xff4444,
+    edgeOpacity: 0.9,
   },
 
   WHITE_CUBE: {
@@ -36,14 +36,14 @@ export const CUBE_TYPES: Record<string, CubeDefinition> = {
     name: 'Ghost',
     size: 1.0,
     material: {
-      color: 0xeeeeee,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
+      color: 0xffffff, // Pure white
+      emissive: 0xcccccc,
+      emissiveIntensity: 0.2,
       metalness: 0.1,
-      roughness: 0.8,
+      roughness: 0.7,
     },
     edgeColor: 0xffffff,
-    edgeOpacity: 0.9,
+    edgeOpacity: 1.0,
   },
 
   BLACK_CUBE: {
@@ -51,14 +51,14 @@ export const CUBE_TYPES: Record<string, CubeDefinition> = {
     name: 'Shadow',
     size: 1.0,
     material: {
-      color: 0x1a1a1a,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
+      color: 0x333333, // Brighter black
+      emissive: 0x111111,
+      emissiveIntensity: 0.15,
       metalness: 0.2,
-      roughness: 0.9,
+      roughness: 0.8,
     },
-    edgeColor: 0x444444,
-    edgeOpacity: 0.7,
+    edgeColor: 0x666666,
+    edgeOpacity: 0.8,
   },
 
   BLUE_CUBE: {
@@ -66,14 +66,14 @@ export const CUBE_TYPES: Record<string, CubeDefinition> = {
     name: 'Steel',
     size: 1.0,
     material: {
-      color: 0x4a5f7a,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
-      metalness: 0.6,
-      roughness: 0.4,
+      color: 0x5577aa, // Brighter blue
+      emissive: 0x223344,
+      emissiveIntensity: 0.25,
+      metalness: 0.7,
+      roughness: 0.3,
     },
-    edgeColor: 0x6a8fc3,
-    edgeOpacity: 0.8,
+    edgeColor: 0x88aaff,
+    edgeOpacity: 0.9,
   },
 
   GOLD_CUBE: {
@@ -81,14 +81,14 @@ export const CUBE_TYPES: Record<string, CubeDefinition> = {
     name: 'Gold',
     size: 1.0,
     material: {
-      color: 0xd4af37,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
-      metalness: 0.8,
-      roughness: 0.3,
+      color: 0xffcc33, // Brighter gold
+      emissive: 0x886622,
+      emissiveIntensity: 0.4,
+      metalness: 0.9,
+      roughness: 0.2,
     },
-    edgeColor: 0xffd700,
-    edgeOpacity: 0.9,
+    edgeColor: 0xffdd66,
+    edgeOpacity: 1.0,
   },
 
   GREEN_CUBE: {
@@ -96,14 +96,14 @@ export const CUBE_TYPES: Record<string, CubeDefinition> = {
     name: 'Forest',
     size: 1.0,
     material: {
-      color: 0x2d5016,
-      emissive: 0x000000,
-      emissiveIntensity: 0.0,
+      color: 0x44aa33, // Brighter green
+      emissive: 0x224411,
+      emissiveIntensity: 0.3,
       metalness: 0.2,
-      roughness: 0.8,
+      roughness: 0.7,
     },
-    edgeColor: 0x4a7c2c,
-    edgeOpacity: 0.8,
+    edgeColor: 0x66cc44,
+    edgeOpacity: 0.9,
   },
 };
 

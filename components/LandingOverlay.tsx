@@ -1,31 +1,50 @@
 import React from 'react';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 import { CubeDefinition } from '../utils/cubeDefinition';
+import { AccountButton } from './AccountButton';
 import { CubeButton } from './CubeButton';
-import { MenuButton } from './MenuButton';
+import { InfoButton } from './InfoButton';
+import { SoundButton } from './SoundButton';
 
 interface LandingOverlayProps {
   tapHintOpacity: Animated.Value;
   selectedCube: CubeDefinition;
   onOpenCubeSelector: () => void;
   onOpenMenu: () => void;
+  soundEnabled: boolean;
+  onToggleSound: () => void;
+  onOpenAccount: () => void;
+  onOpenInfo: () => void;
 }
 
 export const LandingOverlay: React.FC<LandingOverlayProps> = ({ 
   tapHintOpacity, 
   selectedCube,
   onOpenCubeSelector,
-  onOpenMenu
+  onOpenMenu,
+  soundEnabled,
+  onToggleSound,
+  onOpenAccount,
+  onOpenInfo,
 }) => {
   return (
     <View style={styles.container} pointerEvents="box-none">
-      {/* Top left buttons - AUTO allows both container and children to capture touches */}
+      {/* Top left buttons - COLUMN layout with 3 buttons */}
       <View style={styles.topLeftButtons} pointerEvents="auto">
         <CubeButton 
           selectedCube={selectedCube}
           onPress={onOpenCubeSelector}
         />
-        <MenuButton onPress={onOpenMenu} />
+        <SoundButton 
+          isEnabled={soundEnabled}
+          onPress={onToggleSound}
+        />
+        <AccountButton onPress={onOpenAccount} />
+      </View>
+
+      {/* Top right info button */}
+      <View style={styles.topRightButton} pointerEvents="auto">
+        <InfoButton onPress={onOpenInfo} />
       </View>
 
       {/* Title - PASS THROUGH TOUCHES */}
@@ -60,9 +79,15 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 60,
     left: 20,
-    flexDirection: 'row',
-    gap: 8,
-    zIndex: 10000, // Even higher z-index to ensure it's on top
+    flexDirection: 'column', // COLUMN layout
+    gap: 8, // 8px gap between buttons
+    zIndex: 10000,
+  },
+  topRightButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    zIndex: 10000,
   },
   titleContainer: {
     alignItems: 'center',

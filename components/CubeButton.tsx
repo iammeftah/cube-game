@@ -126,11 +126,16 @@ export const CubeButton: React.FC<CubeButtonProps> = ({ selectedCube, onPress })
   );
 };
 
+// Update only the styles in CubeButton.tsx
 const styles = StyleSheet.create({
   button: {
     width: 44,
     height: 44,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.1)',
   },
   glView: {
     flex: 1,

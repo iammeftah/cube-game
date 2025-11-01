@@ -1,4 +1,3 @@
-import { CubeDefinition } from '@/utils/cubeDefinition';
 import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Dimensions, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
@@ -6,6 +5,7 @@ import { GAME_CONFIG } from '../constants/gameConfig';
 import { useCubeContext } from '../contexts/CubeContext';
 import { GameManager } from '../managers/GameManager';
 import { GameState } from '../types/game.types';
+import { CubeDefinition } from '../utils/cubeDefinition';
 import { CubeSelector } from './CubeSelector';
 import { GameOverOverlay } from './GameOverOverlay';
 import { LandingOverlay } from './LandingOverlay';
@@ -19,6 +19,7 @@ export default function Game3D() {
   const [finalScore, setFinalScore] = useState(0);
   const [cubeSelectorVisible, setCubeSelectorVisible] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   
   // USE CUBE CONTEXT instead of local state
   const { selectedCube, setSelectedCube } = useCubeContext();
@@ -130,22 +131,56 @@ export default function Game3D() {
     }
   };
 
+  const handleToggleSound = () => {
+    // TODO: Implement sound toggle functionality
+    // This should enable/disable game sound effects and music
+    setSoundEnabled(!soundEnabled);
+    console.log('Sound toggled:', !soundEnabled);
+  };
+
+  const handleOpenAccount = () => {
+    // TODO: Implement account functionality
+    // This will open account management screen
+    console.log('Account button pressed - Feature coming soon');
+  };
+
+  const handleOpenInfo = () => {
+    // TODO: Implement info modal
+    // This should show game instructions and information
+    console.log('Info button pressed - Feature coming soon');
+  };
+
   // Handle landing screen taps - only if not in button area
   const handleLandingTap = (event: any) => {
     const { locationX, locationY } = event.nativeEvent;
     
-    // Expanded button area to be safe: x: 0-150, y: 40-140
-    const buttonAreaLeft = 0;
-    const buttonAreaRight = 150;
-    const buttonAreaTop = 40;
-    const buttonAreaBottom = 140;
+    // Expanded button areas:
+    // Left buttons: x: 0-80, y: 40-220 (column of 3 buttons)
+    // Right button: x: SCREEN_WIDTH-80 to SCREEN_WIDTH, y: 40-120
+    const leftButtonArea = {
+      left: 0,
+      right: 80,
+      top: 40,
+      bottom: 220, // 3 buttons (44px each) + 2 gaps (8px each) = 160px total
+    };
     
-    // If tap is in button area, ignore it (let buttons handle it)
+    const rightButtonArea = {
+      left: SCREEN_WIDTH - 80,
+      right: SCREEN_WIDTH,
+      top: 40,
+      bottom: 120,
+    };
+    
+    // If tap is in button areas, ignore it (let buttons handle it)
     if (
-      locationX >= buttonAreaLeft && 
-      locationX <= buttonAreaRight && 
-      locationY >= buttonAreaTop && 
-      locationY <= buttonAreaBottom
+      (locationX >= leftButtonArea.left && 
+       locationX <= leftButtonArea.right && 
+       locationY >= leftButtonArea.top && 
+       locationY <= leftButtonArea.bottom) ||
+      (locationX >= rightButtonArea.left && 
+       locationX <= rightButtonArea.right && 
+       locationY >= rightButtonArea.top && 
+       locationY <= rightButtonArea.bottom)
     ) {
       console.log('Tap in button area - ignoring');
       return;
@@ -251,6 +286,10 @@ export default function Game3D() {
               console.log('Opening menu');
               setMenuVisible(true);
             }}
+            soundEnabled={soundEnabled}
+            onToggleSound={handleToggleSound}
+            onOpenAccount={handleOpenAccount}
+            onOpenInfo={handleOpenInfo}
           />
         )}
 

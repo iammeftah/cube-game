@@ -1,21 +1,19 @@
-// Update MenuButton.tsx completely
 import React from 'react';
-import { StyleSheet, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 
-interface MenuButtonProps {
+interface SoundButtonProps {
+  isEnabled: boolean;
   onPress: () => void;
 }
 
-export const MenuButton: React.FC<MenuButtonProps> = ({ onPress }) => {
+export const SoundButton: React.FC<SoundButtonProps> = ({ isEnabled, onPress }) => {
   return (
     <TouchableOpacity 
       style={styles.button}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View style={styles.line} />
-      <View style={styles.line} />
-      <View style={styles.line} />
+      <Text style={styles.icon}>{isEnabled ? '🔊' : '🔇'}</Text>
     </TouchableOpacity>
   );
 };
@@ -26,16 +24,12 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: 4,
     backgroundColor: 'rgba(255, 255, 255, 0.05)',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.1)',
   },
-  line: {
-    width: 24,
-    height: 2,
-    backgroundColor: '#ffffff',
-    borderRadius: 1,
+  icon: {
+    fontSize: 20,
   },
 });
