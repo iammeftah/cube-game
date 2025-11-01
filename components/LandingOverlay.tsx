@@ -8,21 +8,18 @@ interface LandingOverlayProps {
 export const LandingOverlay: React.FC<LandingOverlayProps> = ({ tapHintOpacity }) => {
   return (
     <View style={styles.container} pointerEvents="none">
-      {/* Title */}
       <View style={styles.titleContainer}>
         <Text style={styles.titleJapanese}>影の道</Text>
         <View style={styles.titleDivider} />
         <Text style={styles.titleEnglish}>SHADOW PATH</Text>
       </View>
 
-      {/* Tap hint */}
       <Animated.View style={[styles.tapHintContainer, { opacity: tapHintOpacity }]}>
         <Text style={styles.tapHint}>TAP TO BEGIN</Text>
         <View style={styles.tapDivider} />
       </Animated.View>
 
-      {/* Bottom instruction */}
-      <Text style={styles.bottomInstruction}>TAP LEFT OR RIGHT TO SURVIVE</Text>
+      <Text style={styles.bottomInstruction}>CLICK LEFT/RIGHT TO MOVE • DOUBLE-CLICK TO JUMP</Text>
     </View>
   );
 };
@@ -87,5 +84,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: '#555555',
     letterSpacing: 2,
+    textAlign: 'center',
   },
 });

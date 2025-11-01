@@ -9,7 +9,7 @@ export const createPlayer = (): THREE.Mesh => {
   );
   
   const material = new THREE.MeshStandardMaterial({
-    color: GAME_CONFIG.PLAYER.COLOR,
+    color: GAME_CONFIG.PLAYER.COLOR, // Blood red
     emissive: GAME_CONFIG.PLAYER.EMISSIVE,
     emissiveIntensity: GAME_CONFIG.PLAYER.EMISSIVE_INTENSITY,
     metalness: GAME_CONFIG.PLAYER.METALNESS,
@@ -17,51 +17,25 @@ export const createPlayer = (): THREE.Mesh => {
   });
   
   const player = new THREE.Mesh(geometry, material);
-  player.position.set(0, 0, 0);
+  player.position.set(0, GAME_CONFIG.PLAYER.INITIAL_Y, 0);
+  
+  // Add glowing edges to player
+  const edges = new THREE.EdgesGeometry(geometry);
+  const edgeMaterial = new THREE.LineBasicMaterial({ 
+    color: 0xff0000,
+    linewidth: 2,
+  });
+  const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
+  player.add(edgeLines);
   
   return player;
 };
 
-export const createPath = (): THREE.Group => {
-  const pathGroup = new THREE.Group();
-  const tileGeometry = new THREE.BoxGeometry(
-    GAME_CONFIG.PATH.TILE_WIDTH,
-    GAME_CONFIG.PATH.TILE_HEIGHT,
-    GAME_CONFIG.PATH.TILE_DEPTH
-  );
-
-  // Create initial centered tiles
-  for (let i = 0; i < GAME_CONFIG.PATH.INITIAL_CENTERED_TILES; i++) {
-    const tileMaterial = new THREE.MeshStandardMaterial({
-      color: GAME_CONFIG.PATH.TILE_COLOR,
-      emissive: GAME_CONFIG.PATH.TILE_EMISSIVE,
-      emissiveIntensity: GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY,
-    });
-    
-    const tile = new THREE.Mesh(tileGeometry, tileMaterial);
-    tile.position.z = -i * GAME_CONFIG.PATH.TILE_SPACING;
-    tile.position.y = GAME_CONFIG.PATH.TILE_Y_POSITION;
-    tile.position.x = 0;
-    pathGroup.add(tile);
-  }
-
-  // Create random tiles
-  for (let i = GAME_CONFIG.PATH.INITIAL_CENTERED_TILES; i < GAME_CONFIG.PATH.TOTAL_TILES; i++) {
-    const tileMaterial = new THREE.MeshStandardMaterial({
-      color: GAME_CONFIG.PATH.TILE_COLOR,
-      emissive: GAME_CONFIG.PATH.TILE_EMISSIVE,
-      emissiveIntensity: GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY,
-    });
-    
-    const tile = new THREE.Mesh(tileGeometry, tileMaterial);
-    tile.position.z = -i * GAME_CONFIG.PATH.TILE_SPACING;
-    tile.position.y = GAME_CONFIG.PATH.TILE_Y_POSITION;
-    tile.position.x = Math.random() > 0.5 ? -GAME_CONFIG.PATH.SIDE_OFFSET : GAME_CONFIG.PATH.SIDE_OFFSET;
-    pathGroup.add(tile);
-  }
-
-  return pathGroup;
-};
+export interface PathTile {
+  mesh: THREE.Mesh;
+  position: 'left' | 'center' | 'right';
+  index: number;
+}
 
 export const createParticles = (): THREE.Points => {
   const geometry = new THREE.BufferGeometry();
@@ -76,7 +50,7 @@ export const createParticles = (): THREE.Points => {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   
   const material = new THREE.PointsMaterial({
-    color: GAME_CONFIG.PARTICLES.COLOR,
+    color: GAME_CONFIG.PARTICLES.COLOR, // Blood red
     size: GAME_CONFIG.PARTICLES.SIZE,
     transparent: true,
     opacity: GAME_CONFIG.PARTICLES.OPACITY,

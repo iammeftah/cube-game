@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-export type GameState = 'landing' | 'playing';
+export type GameState = 'landing' | 'playing' | 'gameOver';
 
 export interface GameRefs {
   scene: THREE.Scene | null;

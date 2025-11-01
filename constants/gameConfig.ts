@@ -1,90 +1,105 @@
 import * as THREE from 'three';
 
 export const GAME_CONFIG = {
-  // Camera settings
   CAMERA: {
     FOV: 75,
     NEAR: 0.1,
     FAR: 1000,
-    LANDING_POSITION: new THREE.Vector3(10, 10, 15),
-    PLAYING_POSITION: new THREE.Vector3(0, 3.5, 7),
-    LANDING_LOOK_AT: new THREE.Vector3(0, 0, -8),
+    LANDING_POSITION: new THREE.Vector3(8, 12, 14),
+    PLAYING_POSITION: new THREE.Vector3(0, 8, 13),
+    LANDING_LOOK_AT: new THREE.Vector3(0, 0, -5),
     PLAYING_LOOK_AT: new THREE.Vector3(0, 0, -5),
     ORBIT_RADIUS: 16,
-    ORBIT_SPEED: 0.003,
+    ORBIT_SPEED: 0.002,
+    FOLLOW_SMOOTHNESS: 0.1,
   },
 
-  // Scene settings
   SCENE: {
-    BACKGROUND_COLOR: 0x000000,
-    FOG_NEAR: 15,
+    BACKGROUND_COLOR: 0x000000, // Pure black
+    FOG_NEAR: 20,
     FOG_FAR: 60,
   },
 
-  // Lighting
   LIGHTING: {
     AMBIENT_INTENSITY: 0.3,
-    DIRECTIONAL_INTENSITY: 0.7,
-    DIRECTIONAL_POSITION: new THREE.Vector3(5, 10, 5),
+    DIRECTIONAL_INTENSITY: 0.6,
+    DIRECTIONAL_POSITION: new THREE.Vector3(10, 20, 10),
     RED_LIGHT: {
-      COLOR: 0xff0000,
+      COLOR: 0xff0000, // Blood red
       INTENSITY: 2.5,
-      DISTANCE: 25,
-      POSITION: new THREE.Vector3(0, 5, -5),
+      DISTANCE: 30,
+      POSITION: new THREE.Vector3(0, 8, -5),
     },
     BLUE_LIGHT: {
-      COLOR: 0x4444ff,
+      COLOR: 0x8B0000, // Dark red
       INTENSITY: 1.5,
-      DISTANCE: 30,
-      POSITION: new THREE.Vector3(-8, 4, -15),
+      DISTANCE: 25,
+      POSITION: new THREE.Vector3(-5, 6, -15),
     },
   },
 
-  // Player settings
   PLAYER: {
-    SIZE: 0.8,
-    COLOR: 0xff0000,
-    EMISSIVE: 0x880000,
-    EMISSIVE_INTENSITY: 0.6,
+    SIZE: 1.2,
+    COLOR: 0xff0000, // Blood red cube
+    EMISSIVE: 0x8B0000,
+    EMISSIVE_INTENSITY: 0.7,
     METALNESS: 0.4,
-    ROUGHNESS: 0.6,
-    BOUNCE_SPEED: 2.5,
-    BOUNCE_AMPLITUDE: 0.08,
-    ROTATION_SPEED: 0.015,
+    ROUGHNESS: 0.5,
+    INITIAL_Y: 5,
+    GROUND_OFFSET: 0.6,
+    FALL_THRESHOLD: -20,
+    DROP_DURATION: 800,
+    FORWARD_SPEED: 0.15,
+    GRAVITY: 0.03,
+    JUMP_FORCE: 0.55,
+    ROTATION_SPEED: 0.02,
+    BOUNCE_SPEED: 2.0,
+    BOUNCE_AMPLITUDE: 0.1,
+    LANE_SWITCH_SPEED: 0.2,
+    LANE_SPACING: 2.5,
   },
 
-  // Path settings
   PATH: {
-    TILE_WIDTH: 2,
-    TILE_HEIGHT: 0.3,
-    TILE_DEPTH: 2,
-    TILE_SPACING: 2.5,
-    INITIAL_CENTERED_TILES: 3,
-    TOTAL_TILES: 40,
-    TILE_COLOR: 0x555555,
-    TILE_EMISSIVE: 0x222222,
-    TILE_EMISSIVE_INTENSITY: 0.3,
+    WIDTH: 2.0,
+    LANE_SPACING: 2.5,
+    SEGMENT_LENGTH: 2.0, // No gaps between tiles
+    VISIBLE_DISTANCE: 50,
+    CLEANUP_DISTANCE: 20,
+    GENERATION_STEP: 2.0,
+    CURVE_INTENSITY: 0,
+    CURVE_SMOOTHING: 0,
+    CURVE_FREQUENCY: 0,
+    HEIGHT_VARIATION: 0,
+    HEIGHT_FREQUENCY: 0,
+    GAP_CHANCE: 0.2,
+    MIN_GAP_DISTANCE: 10,
     TILE_Y_POSITION: -1,
-    SIDE_OFFSET: 2,
+    TILE_HEIGHT: 0.6,
+    TILE_COLOR: 0x2a2a3e, // Dark blue-gray
+    TILE_EMISSIVE: 0x1a1a2e,
+    TILE_EMISSIVE_INTENSITY: 0.2,
+    EDGE_COLOR: 0xff0000, // Blood red edges
   },
 
-  // Particles
   PARTICLES: {
-    COUNT: 250,
-    COLOR: 0xff0000,
-    SIZE: 0.12,
+    COUNT: 200,
+    COLOR: 0xff0000, // Blood red particles
+    SIZE: 0.15,
     OPACITY: 0.5,
-    ROTATION_SPEED: 0.0015,
+    ROTATION_SPEED: 0.0012,
     SPREAD_X: 40,
-    SPREAD_Y: 25,
+    SPREAD_Y: 30,
     SPREAD_Z: 80,
   },
 
-  // Animation
   ANIMATION: {
-    TRANSITION_DURATION: 2000,
+    TRANSITION_DURATION: 1800,
     FADE_IN_DURATION: 1000,
     TAP_HINT_DURATION: 1200,
     TAP_HINT_MIN_OPACITY: 0.4,
+  },
+
+  GAMEPLAY: {
+    INITIAL_PLAYER_POSITION: 0,
   },
 } as const;
