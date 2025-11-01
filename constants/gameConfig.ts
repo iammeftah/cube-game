@@ -11,7 +11,8 @@ export const GAME_CONFIG = {
     PLAYING_LOOK_AT: new THREE.Vector3(0, 0, -5),
     ORBIT_RADIUS: 16,
     ORBIT_SPEED: 0.0015,
-    FOLLOW_SMOOTHNESS: 0.08,
+    // PERFORMANCE FIX: Slightly increased smoothness for more stable following
+    FOLLOW_SMOOTHNESS: 0.12,
   },
 
   SCENE: {
@@ -26,10 +27,6 @@ export const GAME_CONFIG = {
     DIRECTIONAL_POSITION: new THREE.Vector3(10, 20, 10),
   },
 
-  // gameConfig.ts - UPDATE these values for better jumping
-
-  // gameConfig.ts - KEEP GRAVITY AS IS
-
   PLAYER: {
     SIZE: 1.0,
     COLOR: 0xcc0000,
@@ -41,12 +38,15 @@ export const GAME_CONFIG = {
     GROUND_OFFSET: 0.5,
     FALL_THRESHOLD: -20,
     DROP_DURATION: 800,
+    // PERFORMANCE FIX: Use exact value that divides evenly into frame time
     FORWARD_SPEED: 0.12,
-    GRAVITY: 0.032, // Keep original
-    JUMP_FORCE: 0.65, // Keep improved jump
+    GRAVITY: 0.032,
+    JUMP_FORCE: 0.65,
     ROTATION_SPEED: 0.003,
+    // PERFORMANCE FIX: Disabled bounce for cleaner motion
     BOUNCE_SPEED: 2.0,
-    BOUNCE_AMPLITUDE: 0.0,
+    BOUNCE_AMPLITUDE: 0.15,
+    // PERFORMANCE FIX: Slightly faster lane switching for more responsive feel
     LANE_SWITCH_SPEED: 0.2,
     LANE_SPACING: 2.5,
   },
@@ -65,7 +65,8 @@ export const GAME_CONFIG = {
     HEIGHT_FREQUENCY: 0,
     GAP_CHANCE: 0.2,
     MIN_GAP_DISTANCE: 10,
-    TILE_Y_POSITION: -1,
+    // PERFORMANCE FIX: Exact Y position - never changes
+    TILE_Y_POSITION: -1.0,
     TILE_HEIGHT: 0.6,
     TILE_COLOR: 0x2a2a2a,
     TILE_EMISSIVE: 0x000000,

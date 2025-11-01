@@ -28,6 +28,9 @@ export class PlayerController {
   private timeOffPath: number = 0;
   private hasCommittedToFall: boolean = false;
   
+  // PERFORMANCE FIX: Lock Y position when grounded
+  private lockedGroundY: number = 0;
+  
   // Constants
   private readonly FALL_GRACE_PERIOD = 150;
   private readonly LANE_SWITCH_SMOOTHNESS = 0.18;
@@ -67,6 +70,8 @@ export class PlayerController {
         } else {
           this.isDropping = false;
           this.isGrounded = true;
+          this.lockedGroundY = endY; // LOCK the ground position
+          this.player.position.y = this.lockedGroundY; // Set exact position
           // Reset to clean state - no rotation
           this.player.rotation.set(0, 0, 0);
           resolve();
@@ -89,6 +94,8 @@ export class PlayerController {
     this.isChangingLane = false;
     this.isJumping = false;
     this.jumpStartTime = 0;
+    // Lock ground position
+    this.lockedGroundY = this.currentPathY + 0.4 + GAME_CONFIG.PLAYER.GROUND_OFFSET;
     // Clean slate - no rotation
     this.player.rotation.set(0, 0, 0);
     console.log('Player activated, lane:', this.currentLane);
@@ -188,18 +195,17 @@ export class PlayerController {
       this.player.rotation.x = this.startRotationX + (Math.PI * 2 * progress);
       this.player.rotation.x = -this.player.rotation.x; // Forward flip
       
-      console.log('Jump progress:', (progress * 100).toFixed(1), '% - Rotation:', (this.player.rotation.x / Math.PI).toFixed(2), 'π');
-      
       // If we've landed and completed the rotation
       if (this.isGrounded && progress >= 0.5) {
         console.log('Front flip completed on landing');
         this.isJumping = false;
         // Snap to exact rotation to avoid drift
-        this.player.rotation.x = Math.round(this.player.rotation.x / (Math.PI * 2)) * Math.PI * 2;
+        this.player.rotation.x = 0;
+        this.player.rotation.y = 0;
+        this.player.rotation.z = 0;
       }
     } else if (this.isGrounded && !this.hasCommittedToFall) {
-      // STEADY - No rotation while moving forward on ground
-      // Keep cube completely stable
+      // PERFORMANCE FIX: Keep rotation locked at zero for stability
       this.player.rotation.x = 0;
       this.player.rotation.y = 0;
       
@@ -211,6 +217,9 @@ export class PlayerController {
       } else {
         // Smoothly return to neutral position
         this.player.rotation.z *= 0.85;
+        if (Math.abs(this.player.rotation.z) < 0.001) {
+          this.player.rotation.z = 0; // Snap to zero
+        }
       }
       
     } else if (this.hasCommittedToFall) {
@@ -245,6 +254,8 @@ export class PlayerController {
       this.timeOffPath += 16.67;
     } else {
       this.timeOffPath = 0;
+      // Update locked ground Y when on path
+      this.lockedGroundY = groundY;
     }
 
     // Handle jumping/falling physics
@@ -256,9 +267,9 @@ export class PlayerController {
       // Check for landing
       if (this.player.position.y <= groundY) {
         if (collisionCheck.onPath) {
-          // Successful landing
-          console.log('LANDED! Setting grounded to true');
+          // Successful landing - LOCK position exactly
           this.player.position.y = groundY;
+          this.lockedGroundY = groundY;
           this.isGrounded = true;
           this.velocityY = 0;
           this.isFalling = false;
@@ -275,8 +286,8 @@ export class PlayerController {
         }
       }
     } else {
-      // Currently grounded - keep position steady
-      this.player.position.y = groundY; // Lock to ground position to prevent vibration
+      // PERFORMANCE FIX: Lock Y position when grounded - NO ADJUSTMENTS
+      this.player.position.y = this.lockedGroundY;
       
       if (!collisionCheck.onPath) {
         // Just stepped off platform
@@ -335,5 +346,6 @@ export class PlayerController {
     this.hasCommittedToFall = false;
     this.isJumping = false;
     this.jumpStartTime = 0;
+    this.lockedGroundY = 0;
   }
 }

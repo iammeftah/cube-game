@@ -126,19 +126,14 @@ export class GameManager {
   }
 
   private startAnimationLoop(gl: ExpoWebGLRenderingContext): void {
-    let frameCount = 0;
-    
     const animate = () => {
       this.animationFrameId = requestAnimationFrame(animate);
       
-      frameCount++;
-      
       this.animationManager.updateTime();
 
-      // In the startAnimationLoop method, find this section and update it:
+      // PERFORMANCE FIX: Only animate on landing screen
       if (this.player && this.gameState === 'landing') {
-        // REMOVED: rotation animation on landing screen
-        // Only gentle floating animation - cube stays perfectly still rotationally
+        // Gentle floating animation - cube stays perfectly still rotationally
         this.player.position.y = GAME_CONFIG.PLAYER.INITIAL_Y + 
           Math.sin(this.animationManager.getTime() * GAME_CONFIG.PLAYER.BOUNCE_SPEED) * 
           GAME_CONFIG.PLAYER.BOUNCE_AMPLITUDE;
@@ -146,6 +141,9 @@ export class GameManager {
         // Keep rotation locked at zero
         this.player.rotation.set(0, 0, 0);
       }
+
+      // PERFORMANCE FIX: NO player animations during gameplay
+      // Physics and rotation are handled by PlayerController only
 
       if (this.particles) {
         this.animationManager.animateParticles(this.particles);
@@ -166,9 +164,9 @@ export class GameManager {
             this.playerController.setPathCurveOffset(firstSegment.centerX);
           }
           
+          // PERFORMANCE FIX: Update in correct order for smooth movement
           this.playerController.updateHorizontalPosition();
           this.playerController.updateForward();
-          this.playerController.updateRotation();
           
           const playerZ = this.playerController.getPlayerZ();
           this.pathGenerator.update(playerZ);
@@ -178,7 +176,9 @@ export class GameManager {
             playerZ
           );
 
+          // Update physics BEFORE rotation to prevent jitter
           const playerState = this.playerController.updatePhysics(collisionCheck);
+          this.playerController.updateRotation();
 
           if (playerState === 'dead') {
             console.log('Player died! Final score:', this.score);

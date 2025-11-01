@@ -6,6 +6,10 @@ export class CameraController {
   private cameraAngle: number = 0;
   private isFollowing: boolean = false;
   private playerRef: THREE.Mesh | null = null;
+  
+  // PERFORMANCE FIX: Cache target positions to reduce calculations
+  private targetPosition: THREE.Vector3 = new THREE.Vector3();
+  private lookAtPoint: THREE.Vector3 = new THREE.Vector3();
 
   constructor(camera: THREE.PerspectiveCamera) {
     this.camera = camera;
@@ -28,28 +32,33 @@ export class CameraController {
   updateFollowPlayer(): void {
     if (!this.isFollowing || !this.playerRef) return;
 
-    // Smooth camera following using lerp
+    // PERFORMANCE FIX: Use fixed camera offset for stability
     const offset = GAME_CONFIG.CAMERA.PLAYING_POSITION;
     
-    // Target positions
-    const targetX = this.playerRef.position.x + offset.x;
-    const targetZ = this.playerRef.position.z + offset.z;
-    
-    // Smooth interpolation to prevent jittering
-    const smoothing = GAME_CONFIG.CAMERA.FOLLOW_SMOOTHNESS;
-    this.camera.position.x += (targetX - this.camera.position.x) * smoothing;
-    this.camera.position.z += (targetZ - this.camera.position.z) * smoothing;
-    this.camera.position.y = offset.y;
-
-    // Look at a point slightly ahead of the player
-    const lookAtPoint = new THREE.Vector3(
-        this.playerRef.position.x,
-        this.playerRef.position.y,
-        this.playerRef.position.z - 5
+    // Calculate target positions
+    this.targetPosition.set(
+      this.playerRef.position.x + offset.x,
+      offset.y, // Fixed Y height - never changes
+      this.playerRef.position.z + offset.z
     );
     
-    this.camera.lookAt(lookAtPoint);
-    }
+    // PERFORMANCE FIX: Smooth interpolation with optimized smoothness
+    const smoothing = GAME_CONFIG.CAMERA.FOLLOW_SMOOTHNESS;
+    
+    // Lerp camera position
+    this.camera.position.x += (this.targetPosition.x - this.camera.position.x) * smoothing;
+    this.camera.position.y = offset.y; // Lock Y position - no interpolation needed
+    this.camera.position.z += (this.targetPosition.z - this.camera.position.z) * smoothing;
+
+    // PERFORMANCE FIX: Fixed look-at point for stable viewing
+    this.lookAtPoint.set(
+      this.playerRef.position.x,
+      this.playerRef.position.y,
+      this.playerRef.position.z - 5
+    );
+    
+    this.camera.lookAt(this.lookAtPoint);
+  }
 
   transitionToPlayMode(onComplete: () => void): void {
     const startPos = this.camera.position.clone();
