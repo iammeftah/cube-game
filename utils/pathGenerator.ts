@@ -3,11 +3,10 @@ import { GAME_CONFIG } from '../constants/gameConfig';
 
 interface TileData {
   mesh: THREE.Mesh;
-  lane: number; // 0 = left, 1 = center, 2 = right
+  lane: number;
   zPosition: number;
 }
 
-// Define pattern types
 interface BasePattern {
   type: string;
   rows: number;
@@ -35,25 +34,20 @@ export class PathGenerator {
   }
 
   initialize(): void {
-    console.log('PathGenerator: Initializing continuous tile-based path');
-    
-    // Generate initial path with strategic patterns
+    console.log('PathGenerator: Initializing minimalist tile path');
     this.generateInitialPath();
-    
     console.log('PathGenerator: Tile path created');
   }
 
   private generateInitialPath(): void {
-    // Start with a safe runway - all 3 lanes available
     let z = 0;
     for (let i = 0; i < 5; i++) {
       this.createTileRow(z, [true, true, true]);
-      z += 2.0; // No gap between rows
+      z += 2.0;
     }
     
     this.furthestZ = z;
     
-    // Continue generating with patterns
     while (this.furthestZ < GAME_CONFIG.PATH.VISIBLE_DISTANCE) {
       this.generateNextPattern();
     }
@@ -61,37 +55,22 @@ export class PathGenerator {
 
   private generateNextPattern(): void {
     const patterns: PatternConfig[] = [
-      // Pattern 1: All lanes open (safe section)
       { type: 'straight', rows: 4, lanes: [true, true, true] },
-      
-      // Pattern 2: Force left or right choice
       { type: 'choice', rows: 3, lanes: [true, false, true] },
-      
-      // Pattern 3: Only center (tricky)
       { type: 'narrow', rows: 2, lanes: [false, true, false] },
-      
-      // Pattern 4: Zigzag - forces movement
       { type: 'zigzag', rows: 1, sequence: [
         [true, false, false],
         [false, true, false],
         [false, false, true],
         [false, true, false],
       ]},
-      
-      // Pattern 5: Left side emphasis
       { type: 'side', rows: 3, lanes: [true, true, false] },
-      
-      // Pattern 6: Right side emphasis
       { type: 'side', rows: 3, lanes: [false, true, true] },
-      
-      // Pattern 7: Staircase left to right
       { type: 'stairs', rows: 1, sequence: [
         [true, true, false],
         [false, true, true],
         [false, false, true],
       ]},
-      
-      // Pattern 8: Staircase right to left
       { type: 'stairs', rows: 1, sequence: [
         [false, true, true],
         [true, true, false],
@@ -102,25 +81,23 @@ export class PathGenerator {
     const pattern = patterns[Math.floor(Math.random() * patterns.length)];
     
     if (pattern.type === 'zigzag' || pattern.type === 'stairs') {
-      // Multi-sequence patterns - TypeScript now knows sequence exists
       const multiPattern = pattern as MultiSequencePattern;
       for (const lanes of multiPattern.sequence) {
         this.createTileRow(this.furthestZ, lanes);
-        this.furthestZ += 2.0; // No gap
+        this.furthestZ += 2.0;
       }
     } else {
-      // Single pattern repeated - TypeScript now knows lanes exists
       const singlePattern = pattern as SingleLanePattern;
       for (let i = 0; i < singlePattern.rows; i++) {
         this.createTileRow(this.furthestZ, singlePattern.lanes);
-        this.furthestZ += 2.0; // No gap
+        this.furthestZ += 2.0;
       }
     }
   }
 
   private createTileRow(zPosition: number, lanes: boolean[]): void {
-    const lanePositions = [-2.5, 0, 2.5]; // Left, Center, Right
-    const tileSize = 2.0; // Perfect square
+    const lanePositions = [-2.5, 0, 2.5];
+    const tileSize = 2.0;
     const tileHeight = 0.6;
     
     lanes.forEach((hasTile, laneIndex) => {
@@ -131,23 +108,10 @@ export class PathGenerator {
   }
 
   private createTile(xPos: number, zPos: number, lane: number, size: number, height: number): void {
-    // Dark theme tiles with blood red accents
-    const tileType = Math.random();
-    let color: number;
-    let emissive: number;
-    let emissiveIntensity: number;
-    
-    if (tileType < 0.15) {
-      // Blood red accent tiles (15% chance)
-      color = 0x8B0000;
-      emissive = 0xff0000;
-      emissiveIntensity = 0.4;
-    } else {
-      // Dark gray tiles (most common)
-      color = 0x2a2a3e;
-      emissive = 0x1a1a2e;
-      emissiveIntensity = 0.2;
-    }
+    // Minimalist tiles - clean and simple
+    const color = GAME_CONFIG.PATH.TILE_COLOR;
+    const emissive = GAME_CONFIG.PATH.TILE_EMISSIVE;
+    const emissiveIntensity = GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY;
     
     const geometry = new THREE.BoxGeometry(size, height, size);
     const material = new THREE.MeshStandardMaterial({
@@ -161,31 +125,15 @@ export class PathGenerator {
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(xPos, -1, -zPos);
     
-    // Add glowing red edge lines
+    // Subtle edges
     const edges = new THREE.EdgesGeometry(geometry);
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: 0xff0000,
-      linewidth: 2,
+      color: GAME_CONFIG.PATH.EDGE_COLOR,
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.4,
     });
     const lineSegments = new THREE.LineSegments(edges, lineMaterial);
     mesh.add(lineSegments);
-    
-    // Add subtle top glow for blood red tiles
-    if (tileType < 0.15) {
-      const glowGeometry = new THREE.PlaneGeometry(size * 0.8, size * 0.8);
-      const glowMaterial = new THREE.MeshBasicMaterial({
-        color: 0xff0000,
-        transparent: true,
-        opacity: 0.3,
-        side: THREE.DoubleSide,
-      });
-      const glow = new THREE.Mesh(glowGeometry, glowMaterial);
-      glow.rotation.x = -Math.PI / 2;
-      glow.position.y = height / 2 + 0.01;
-      mesh.add(glow);
-    }
     
     this.scene.add(mesh);
     
@@ -199,7 +147,6 @@ export class PathGenerator {
   update(playerZ: number): void {
     const playerDistance = Math.abs(playerZ);
     
-    // Clean up old tiles
     this.tiles = this.tiles.filter(tile => {
       if (tile.zPosition < playerDistance - 20) {
         this.scene.remove(tile.mesh);
@@ -212,7 +159,6 @@ export class PathGenerator {
       return true;
     });
     
-    // Generate new tiles ahead
     while (this.furthestZ < playerDistance + GAME_CONFIG.PATH.VISIBLE_DISTANCE) {
       this.generateNextPattern();
     }
@@ -220,11 +166,8 @@ export class PathGenerator {
 
   checkCollision(playerX: number, playerZ: number): { onPath: boolean; pathY: number; laneIndex: number } {
     const playerDistance = Math.abs(playerZ);
+    const zTolerance = 0.8;
     
-    // More precise Z-axis tolerance for better gap detection
-    const zTolerance = 0.8; // Tighter Z check
-    
-    // Find tiles near player in Z direction
     const nearbyTiles = this.tiles.filter(tile => 
       Math.abs(tile.zPosition - playerDistance) < zTolerance
     );
@@ -233,12 +176,10 @@ export class PathGenerator {
       return { onPath: false, pathY: -1, laneIndex: 1 };
     }
     
-    // More precise lane detection based on tile positions
-    const lanePositions = [-2.5, 0, 2.5]; // Left, Center, Right
-    const laneWidth = 2.0; // Width of each tile
+    const lanePositions = [-2.5, 0, 2.5];
+    const laneWidth = 2.0;
     
-    // Find which lane the player is actually over
-    let laneIndex = 1; // Default to center
+    let laneIndex = 1;
     let minDistance = Infinity;
     
     for (let i = 0; i < lanePositions.length; i++) {
@@ -249,12 +190,10 @@ export class PathGenerator {
       }
     }
     
-    // Check if player is within tile bounds (not just centered on lane)
     const playerLaneCenter = lanePositions[laneIndex];
     const isWithinTileBounds = Math.abs(playerX - playerLaneCenter) < (laneWidth / 2);
     
     if (!isWithinTileBounds) {
-      // Player is between lanes
       return { 
         onPath: false, 
         pathY: -1,
@@ -262,7 +201,6 @@ export class PathGenerator {
       };
     }
     
-    // Check if there's a tile in the player's lane and Z position
     const tileInLane = nearbyTiles.find(tile => tile.lane === laneIndex);
     
     if (tileInLane) {
@@ -283,7 +221,6 @@ export class PathGenerator {
   getFirstSegment(): { centerX: number; zStart: number } | null {
     if (this.tiles.length === 0) return null;
     
-    // Find the tile closest to start
     let closestTile = this.tiles[0];
     let minZ = closestTile.zPosition;
     

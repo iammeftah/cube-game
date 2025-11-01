@@ -12,18 +12,24 @@ export class PlayerController {
   private targetLane: number = 1;
   private currentPathY: number = -1;
   
-  // Rolling physics - realistic box motion
-  private distanceTraveled: number = 0; // Track total distance for rolling
-  private laneChangeRoll: number = 0; // Side roll when changing lanes
-  private targetLaneChangeRoll: number = 0;
+  // Enhanced sliding physics - smooth gliding motion
+  private laneChangeProgress: number = 0; // 0-1 for smooth lane transitions
+  private isChangingLane: boolean = false;
+  private startLaneX: number = 0;
+  private targetLaneX: number = 0;
+  
+  // Subtle hover effect for visual appeal
+  private hoverTime: number = 0;
   
   // Collision tracking
   private timeOffPath: number = 0;
   private hasCommittedToFall: boolean = false;
   
   // Constants
-  private readonly FALL_GRACE_PERIOD = 100; // 100ms grace period
-  private readonly SLIDE_MODE = false; // true = sliding (no forward roll), false = rolling
+  private readonly FALL_GRACE_PERIOD = 150; // Slightly more forgiving grace period
+  private readonly LANE_SWITCH_SMOOTHNESS = 0.18; // Smooth lane transitions
+  private readonly HOVER_AMPLITUDE = 0.08; // Subtle floating effect
+  private readonly HOVER_SPEED = 3.5; // Speed of hover animation
   
   constructor(player: THREE.Mesh) {
     this.player = player;
@@ -46,7 +52,7 @@ export class PlayerController {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        // Smooth drop with ease-out
+        // Smooth drop with ease-out cubic
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         this.player.position.y = startY + (endY - startY) * easeProgress;
 
@@ -55,6 +61,7 @@ export class PlayerController {
         } else {
           this.isDropping = false;
           this.isGrounded = true;
+          // Reset to clean state - no rotation
           this.player.rotation.set(0, 0, 0);
           resolve();
         }
@@ -70,11 +77,12 @@ export class PlayerController {
     this.currentLane = 1;
     this.targetLane = 1;
     this.velocityY = 0;
-    this.distanceTraveled = 0;
-    this.laneChangeRoll = 0;
-    this.targetLaneChangeRoll = 0;
     this.timeOffPath = 0;
     this.hasCommittedToFall = false;
+    this.laneChangeProgress = 0;
+    this.isChangingLane = false;
+    this.hoverTime = 0;
+    // Clean slate - no rotation
     this.player.rotation.set(0, 0, 0);
     console.log('Player activated, lane:', this.currentLane);
   }
@@ -88,8 +96,7 @@ export class PlayerController {
     
     if (this.targetLane > 0) {
       this.targetLane--;
-      // Roll 90 degrees LEFT (positive Z rotation)
-      this.targetLaneChangeRoll += Math.PI / 2;
+      this.startLaneTransition();
       console.log('Moving LEFT to lane:', this.targetLane);
     }
   }
@@ -99,15 +106,23 @@ export class PlayerController {
     
     if (this.targetLane < 2) {
       this.targetLane++;
-      // Roll 90 degrees RIGHT (negative Z rotation)
-      this.targetLaneChangeRoll -= Math.PI / 2;
+      this.startLaneTransition();
       console.log('Moving RIGHT to lane:', this.targetLane);
     }
   }
 
+  private startLaneTransition(): void {
+    const lanePositions = [-2.5, 0, 2.5];
+    this.startLaneX = this.player.position.x;
+    this.targetLaneX = lanePositions[this.targetLane];
+    this.laneChangeProgress = 0;
+    this.isChangingLane = true;
+  }
+
   handleJump(): void {
-    if (!this.isActive || !this.isGrounded || this.hasCommittedToFall) return;
+    if (!this.isActive || this.hasCommittedToFall) return;
     
+    // Remove the isGrounded check - allow jump anytime player is on a tile
     console.log('JUMPING! Grounded:', this.isGrounded, 'VelocityY:', this.velocityY);
     this.velocityY = GAME_CONFIG.PLAYER.JUMP_FORCE;
     this.isGrounded = false;
@@ -120,21 +135,22 @@ export class PlayerController {
   updateHorizontalPosition(): void {
     if (!this.isActive) return;
 
-    const lanePositions = [-2.5, 0, 2.5];
-    const targetX = lanePositions[this.targetLane];
-    
-    // Smooth lane switching
-    const lerpSpeed = 0.2;
-    const deltaX = targetX - this.player.position.x;
-    this.player.position.x += deltaX * lerpSpeed;
-    
-    // Smooth interpolation of lane change roll
-    const rollLerpSpeed = 0.15;
-    this.laneChangeRoll += (this.targetLaneChangeRoll - this.laneChangeRoll) * rollLerpSpeed;
-    
-    // Update current lane when arrived
-    if (Math.abs(deltaX) < 0.1) {
-      this.currentLane = this.targetLane;
+    if (this.isChangingLane) {
+      // Smooth eased lane transition
+      this.laneChangeProgress += this.LANE_SWITCH_SMOOTHNESS;
+      
+      if (this.laneChangeProgress >= 1) {
+        this.laneChangeProgress = 1;
+        this.isChangingLane = false;
+        this.currentLane = this.targetLane;
+      }
+      
+      // Smooth ease-in-out interpolation
+      const ease = this.laneChangeProgress < 0.5
+        ? 2 * this.laneChangeProgress * this.laneChangeProgress
+        : 1 - Math.pow(-2 * this.laneChangeProgress + 2, 2) / 2;
+      
+      this.player.position.x = this.startLaneX + (this.targetLaneX - this.startLaneX) * ease;
     }
   }
 
@@ -143,33 +159,38 @@ export class PlayerController {
     
     const moveDistance = GAME_CONFIG.PLAYER.FORWARD_SPEED;
     this.player.position.z -= moveDistance;
-    
-    // Accumulate distance for rolling calculation
-    this.distanceTraveled += moveDistance;
   }
 
   updateRotation(): void {
     if (!this.isActive) return;
 
-    if (this.SLIDE_MODE) {
-      // SLIDING MODE - Box slides with no forward rotation (like ice skating)
+    if (this.isGrounded && !this.hasCommittedToFall) {
+      // SLIDING PHYSICS - Box sliding on floor, not rolling
+      
+      // NO forward rolling - keep X rotation stable
       this.player.rotation.x = 0;
-      this.player.rotation.z = this.laneChangeRoll; // Only side rolls
-      this.player.rotation.y = 0;
-    } else {
-      // ROLLING MODE - Box rolls forward naturally
-      // Physics: rotation = distance / radius
-      // For a cube rolling on edge, radius = size/2
-      const cubeSize = GAME_CONFIG.PLAYER.SIZE;
-      const radius = cubeSize / 2;
       
-      // Calculate forward roll rotation (NEGATIVE because moving forward = rotate backward in X-axis)
-      const forwardRoll = -(this.distanceTraveled / radius);
+      // Slight tilt in direction of lane change (like pushing a box)
+      if (this.isChangingLane) {
+        const tiltDirection = this.targetLane > this.currentLane ? 1 : -1;
+        const tiltAmount = this.laneChangeProgress * 0.08; // Subtle tilt
+        this.player.rotation.z = tiltDirection * tiltAmount * Math.sin(this.laneChangeProgress * Math.PI);
+      } else {
+        // Smoothly return to neutral position
+        this.player.rotation.z *= 0.85;
+      }
       
-      // Apply all rotations
-      this.player.rotation.x = forwardRoll; // Forward rolling
-      this.player.rotation.z = this.laneChangeRoll; // Lane change rolling
-      this.player.rotation.y = 0; // No spinning
+      // Very subtle Y rotation for visual interest (not spinning)
+      this.player.rotation.y += 0.003;
+      
+    } else if (this.hasCommittedToFall) {
+      // Realistic tumbling when falling
+      this.player.rotation.x += 0.15;
+      this.player.rotation.y += 0.08;
+      this.player.rotation.z += 0.12;
+    } else if (!this.isGrounded) {
+      // In air (jumping) - maintain orientation
+      // Just keep current rotation, no spinning
     }
   }
 
@@ -180,14 +201,9 @@ export class PlayerController {
 
     // Once falling is committed, keep falling until dead
     if (this.hasCommittedToFall) {
-      this.velocityY -= GAME_CONFIG.PLAYER.GRAVITY * 1.5; // Fall faster once committed
+      this.velocityY -= GAME_CONFIG.PLAYER.GRAVITY * 1.8;
       this.player.position.y += this.velocityY;
       
-      // Add tumbling rotation when falling
-      this.player.rotation.x += 0.08;
-      this.player.rotation.z += 0.05;
-      
-      // Check if fallen far enough to be dead
       if (this.player.position.y < GAME_CONFIG.PLAYER.FALL_THRESHOLD) {
         return 'dead';
       }
@@ -199,7 +215,7 @@ export class PlayerController {
 
     // Track time off path
     if (!collisionCheck.onPath) {
-      this.timeOffPath += 16.67; // ~1 frame at 60fps
+      this.timeOffPath += 16.67;
     } else {
       this.timeOffPath = 0;
     }
@@ -222,7 +238,6 @@ export class PlayerController {
         } else {
           // Fell through - check grace period
           if (this.timeOffPath > this.FALL_GRACE_PERIOD) {
-            // Commit to falling - no coming back
             console.log('COMMITTED TO FALL - time off path:', this.timeOffPath);
             this.hasCommittedToFall = true;
             this.isFalling = true;
@@ -235,7 +250,6 @@ export class PlayerController {
       if (!collisionCheck.onPath) {
         // Just stepped off platform
         if (this.timeOffPath > this.FALL_GRACE_PERIOD) {
-          // Grace period expired - commit to fall
           console.log('STEPPED OFF - COMMITTING TO FALL');
           this.hasCommittedToFall = true;
           this.isGrounded = false;
@@ -245,7 +259,7 @@ export class PlayerController {
         } else {
           // In grace period - slight drop but can recover
           this.isGrounded = false;
-          this.velocityY = -0.05; // Small downward velocity
+          this.velocityY = -0.05;
         }
       } else {
         // On path - maintain height
@@ -276,6 +290,12 @@ export class PlayerController {
     return this.currentLane;
   }
 
+  // Add this method inside the PlayerController class (after the constructor)
+  updatePlayerReference(newPlayer: THREE.Mesh): void {
+    this.player = newPlayer;
+    console.log('PlayerController: Player reference updated');
+  }
+
   reset(): void {
     this.player.position.set(0, GAME_CONFIG.PLAYER.INITIAL_Y, 0);
     this.player.rotation.set(0, 0, 0);
@@ -287,10 +307,10 @@ export class PlayerController {
     this.currentLane = 1;
     this.targetLane = 1;
     this.currentPathY = -1;
-    this.distanceTraveled = 0;
-    this.laneChangeRoll = 0;
-    this.targetLaneChangeRoll = 0;
+    this.laneChangeProgress = 0;
+    this.isChangingLane = false;
     this.timeOffPath = 0;
     this.hasCommittedToFall = false;
+    this.hoverTime = 0;
   }
 }

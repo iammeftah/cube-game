@@ -1,11 +1,12 @@
 import { GAME_CONFIG } from '@/constants/gameConfig';
+import { CubeDefinition } from '@/utils/cubeDefinition';
 import { ExpoWebGLRenderingContext } from 'expo-gl';
 import { Renderer } from 'expo-three';
 import * as THREE from 'three';
 import { GameState } from '../types/game.types';
 import { AnimationManager } from '../utils/animationManager';
 import { CameraController } from '../utils/cameraController';
-import { createParticles, createPlayer } from '../utils/gameObjects';
+import { createParticles, createPlayerWithType } from '../utils/gameObjects';
 import { PathGenerator } from '../utils/pathGenerator';
 import { createCamera, createScene, setupLighting } from '../utils/sceneSetup';
 import { PlayerController } from './PlayerController';
@@ -41,7 +42,7 @@ export class GameManager {
     this.onGameOver = callback;
   }
 
-  async initialize(gl: ExpoWebGLRenderingContext): Promise<void> {
+  async initialize(gl: ExpoWebGLRenderingContext, cubeType: CubeDefinition): Promise<void> {
     const { drawingBufferWidth: width, drawingBufferHeight: height } = gl;
 
     this.renderer = new Renderer({ gl });
@@ -54,7 +55,7 @@ export class GameManager {
 
     setupLighting(this.scene);
 
-    this.player = createPlayer();
+    this.player = createPlayerWithType(cubeType);
     this.scene.add(this.player);
     this.playerController = new PlayerController(this.player);
 
@@ -67,6 +68,61 @@ export class GameManager {
     this.scene.add(this.particles);
 
     this.startAnimationLoop(gl);
+  }
+
+  // NEW METHOD: Update player cube type
+  updatePlayerCube(cubeType: CubeDefinition): void {
+    if (!this.player || !this.scene) {
+      console.warn('Cannot update player cube: player or scene not initialized');
+      return;
+    }
+    
+    console.log('Updating player cube to:', cubeType.name);
+    
+    // Store current position and rotation
+    const currentPosition = this.player.position.clone();
+    const currentRotation = this.player.rotation.clone();
+    
+    // Remove old player from scene
+    this.scene.remove(this.player);
+    
+    // Dispose of old geometry and material
+    if (this.player.geometry) {
+      this.player.geometry.dispose();
+    }
+    if (this.player.material instanceof THREE.Material) {
+      this.player.material.dispose();
+    }
+    
+    // Dispose of edge lines if they exist
+    this.player.children.forEach(child => {
+      if (child instanceof THREE.LineSegments) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material instanceof THREE.Material) child.material.dispose();
+      }
+    });
+    
+    // Create new player with selected cube type
+    this.player = createPlayerWithType(cubeType);
+    
+    // Restore position and rotation
+    this.player.position.copy(currentPosition);
+    this.player.rotation.copy(currentRotation);
+    
+    // Add to scene
+    this.scene.add(this.player);
+    
+    // Update player controller reference
+    if (this.playerController) {
+      this.playerController.updatePlayerReference(this.player);
+    }
+    
+    // Update camera controller reference
+    if (this.cameraController) {
+      this.cameraController.setPlayerReference(this.player);
+    }
+    
+    console.log('Player cube updated successfully to:', cubeType.name);
   }
 
   private startAnimationLoop(gl: ExpoWebGLRenderingContext): void {
@@ -107,7 +163,7 @@ export class GameManager {
           
           this.playerController.updateHorizontalPosition();
           this.playerController.updateForward();
-          this.playerController.updateRotation(); // Apply realistic box rotation
+          this.playerController.updateRotation();
           
           const playerZ = this.playerController.getPlayerZ();
           this.pathGenerator.update(playerZ);
@@ -194,7 +250,7 @@ export class GameManager {
       if (firstSegment) {
         // Place player at center lane of first segment
         this.player.position.set(
-          firstSegment.centerX, // Center of path curve
+          firstSegment.centerX,
           GAME_CONFIG.PLAYER.INITIAL_Y,
           -firstSegment.zStart + GAME_CONFIG.PATH.SEGMENT_LENGTH / 2
         );

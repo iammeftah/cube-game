@@ -1,34 +1,16 @@
 import * as THREE from 'three';
 import { GAME_CONFIG } from '../constants/gameConfig';
+import { CubeDefinition, DEFAULT_CUBE_TYPE, createCubeWithType } from './cubeDefinition';
 
-export const createPlayer = (): THREE.Mesh => {
-  const geometry = new THREE.BoxGeometry(
-    GAME_CONFIG.PLAYER.SIZE,
-    GAME_CONFIG.PLAYER.SIZE,
-    GAME_CONFIG.PLAYER.SIZE
-  );
-  
-  const material = new THREE.MeshStandardMaterial({
-    color: GAME_CONFIG.PLAYER.COLOR, // Blood red
-    emissive: GAME_CONFIG.PLAYER.EMISSIVE,
-    emissiveIntensity: GAME_CONFIG.PLAYER.EMISSIVE_INTENSITY,
-    metalness: GAME_CONFIG.PLAYER.METALNESS,
-    roughness: GAME_CONFIG.PLAYER.ROUGHNESS,
-  });
-  
-  const player = new THREE.Mesh(geometry, material);
+export const createPlayerWithType = (cubeType: CubeDefinition): THREE.Mesh => {
+  const player = createCubeWithType(cubeType);
   player.position.set(0, GAME_CONFIG.PLAYER.INITIAL_Y, 0);
-  
-  // Add glowing edges to player
-  const edges = new THREE.EdgesGeometry(geometry);
-  const edgeMaterial = new THREE.LineBasicMaterial({ 
-    color: 0xff0000,
-    linewidth: 2,
-  });
-  const edgeLines = new THREE.LineSegments(edges, edgeMaterial);
-  player.add(edgeLines);
-  
   return player;
+};
+
+// Keep existing createPlayer for backward compatibility
+export const createPlayer = (): THREE.Mesh => {
+  return createPlayerWithType(DEFAULT_CUBE_TYPE);
 };
 
 export interface PathTile {
@@ -50,11 +32,12 @@ export const createParticles = (): THREE.Points => {
   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   
   const material = new THREE.PointsMaterial({
-    color: GAME_CONFIG.PARTICLES.COLOR, // Blood red
+    color: GAME_CONFIG.PARTICLES.COLOR,
     size: GAME_CONFIG.PARTICLES.SIZE,
     transparent: true,
     opacity: GAME_CONFIG.PARTICLES.OPACITY,
     blending: THREE.AdditiveBlending,
+    sizeAttenuation: true,
   });
 
   return new THREE.Points(geometry, material);

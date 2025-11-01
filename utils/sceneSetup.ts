@@ -25,30 +25,20 @@ export const createCamera = (width: number, height: number): THREE.PerspectiveCa
 };
 
 export const setupLighting = (scene: THREE.Scene): void => {
-  // Ambient light
+  // Clean, minimalist lighting setup
+  
+  // Ambient light - provides base illumination
   const ambientLight = new THREE.AmbientLight(0xffffff, GAME_CONFIG.LIGHTING.AMBIENT_INTENSITY);
   scene.add(ambientLight);
 
-  // Directional light
+  // Directional light - main light source
   const dirLight = new THREE.DirectionalLight(0xffffff, GAME_CONFIG.LIGHTING.DIRECTIONAL_INTENSITY);
   dirLight.position.copy(GAME_CONFIG.LIGHTING.DIRECTIONAL_POSITION);
+  dirLight.castShadow = false; // Shadows disabled for performance
   scene.add(dirLight);
 
-  // Red point light
-  const redLight = new THREE.PointLight(
-    GAME_CONFIG.LIGHTING.RED_LIGHT.COLOR,
-    GAME_CONFIG.LIGHTING.RED_LIGHT.INTENSITY,
-    GAME_CONFIG.LIGHTING.RED_LIGHT.DISTANCE
-  );
-  redLight.position.copy(GAME_CONFIG.LIGHTING.RED_LIGHT.POSITION);
-  scene.add(redLight);
-
-  // Blue point light
-  const blueLight = new THREE.PointLight(
-    GAME_CONFIG.LIGHTING.BLUE_LIGHT.COLOR,
-    GAME_CONFIG.LIGHTING.BLUE_LIGHT.INTENSITY,
-    GAME_CONFIG.LIGHTING.BLUE_LIGHT.DISTANCE
-  );
-  blueLight.position.copy(GAME_CONFIG.LIGHTING.BLUE_LIGHT.POSITION);
-  scene.add(blueLight);
+  // Optional: Add a subtle fill light from below for depth
+  const fillLight = new THREE.DirectionalLight(0x4a4a4a, 0.15);
+  fillLight.position.set(0, -10, 0);
+  scene.add(fillLight);
 };

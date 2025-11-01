@@ -1,9 +1,12 @@
+import { CubeDefinition } from '@/utils/cubeDefinition';
 import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Dimensions, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
 import { GAME_CONFIG } from '../constants/gameConfig';
+import { useCubeContext } from '../contexts/CubeContext';
 import { GameManager } from '../managers/GameManager';
 import { GameState } from '../types/game.types';
+import { CubeSelector } from './CubeSelector';
 import { GameOverOverlay } from './GameOverOverlay';
 import { LandingOverlay } from './LandingOverlay';
 import { PlayingOverlay } from './PlayingOverlay';
@@ -14,14 +17,22 @@ export default function Game3D() {
   const [gameState, setGameState] = useState<GameState>('landing');
   const [score, setScore] = useState(0);
   const [finalScore, setFinalScore] = useState(0);
-  const [debugInfo, setDebugInfo] = useState('');
+  const [cubeSelectorVisible, setCubeSelectorVisible] = useState(false);
+  const [menuVisible, setMenuVisible] = useState(false);
+  
+  // USE CUBE CONTEXT instead of local state
+  const { selectedCube, setSelectedCube } = useCubeContext();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const tapHintAnim = useRef(new Animated.Value(1)).current;
   
   const gameManagerRef = useRef<GameManager | null>(null);
+  
+  // Enhanced double-click detection for FAST players
   const lastTapTimeRef = useRef<number>(0);
   const tapCountRef = useRef<number>(0);
+  const isWaitingForSecondTapRef = useRef<boolean>(false);
+  const doubleClickTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -49,11 +60,14 @@ export default function Game3D() {
       if (gameManagerRef.current) {
         gameManagerRef.current.cleanup();
       }
+      if (doubleClickTimeoutRef.current) {
+        clearTimeout(doubleClickTimeoutRef.current);
+      }
     };
   }, []);
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
-    console.log('Creating game context');
+    console.log('Creating game context with cube:', selectedCube.name);
     const gameManager = new GameManager();
     gameManagerRef.current = gameManager;
     
@@ -67,8 +81,9 @@ export default function Game3D() {
       setGameState('gameOver');
     });
     
-    await gameManager.initialize(gl);
-    console.log('Game initialized');
+    // Pass selected cube type here
+    await gameManager.initialize(gl, selectedCube);
+    console.log('Game initialized with cube:', selectedCube.name);
   };
 
   const handleStartGame = async () => {
@@ -95,56 +110,148 @@ export default function Game3D() {
     setFinalScore(0);
   };
 
-  const handleLeftClick = () => {
-    if (gameState === 'landing') {
-      handleStartGame();
-    } else if (gameState === 'playing' && gameManagerRef.current) {
+  const handleOpenCubeSelector = () => {
+    console.log('handleOpenCubeSelector called!');
+    setCubeSelectorVisible(true);
+  };
+
+  const handleCloseCubeSelector = () => {
+    console.log('handleCloseCubeSelector called!');
+    setCubeSelectorVisible(false);
+  };
+
+  const handleSelectCube = (cube: CubeDefinition) => {
+    console.log('Cube selected:', cube.name);
+    setSelectedCube(cube);
+    
+    // Update the player cube in the game manager if it exists
+    if (gameManagerRef.current) {
+      gameManagerRef.current.updatePlayerCube(cube);
+    }
+  };
+
+  // Handle landing screen taps - only if not in button area
+  const handleLandingTap = (event: any) => {
+    const { locationX, locationY } = event.nativeEvent;
+    
+    // Expanded button area to be safe: x: 0-150, y: 40-140
+    const buttonAreaLeft = 0;
+    const buttonAreaRight = 150;
+    const buttonAreaTop = 40;
+    const buttonAreaBottom = 140;
+    
+    // If tap is in button area, ignore it (let buttons handle it)
+    if (
+      locationX >= buttonAreaLeft && 
+      locationX <= buttonAreaRight && 
+      locationY >= buttonAreaTop && 
+      locationY <= buttonAreaBottom
+    ) {
+      console.log('Tap in button area - ignoring');
+      return;
+    }
+    
+    // Otherwise, start game
+    handleStartGame();
+  };
+
+  // Handle screen taps based on position
+  const handleScreenTap = (event: any) => {
+    if (gameState !== 'playing' || !gameManagerRef.current) return;
+
+    const { locationX, locationY } = event.nativeEvent;
+    
+    // Ignore taps in quit button area (top-left corner)
+    if (locationX < 100 && locationY < 120) {
+      console.log('Tap in quit button area - ignoring');
+      return;
+    }
+
+    const screenThird = SCREEN_WIDTH / 3;
+
+    if (locationX < screenThird) {
+      // Left third - move left
       gameManagerRef.current.handleClickLeft();
-      setDebugInfo('← LEFT');
-    }
-  };
-
-  const handleRightClick = () => {
-    if (gameState === 'landing') {
-      handleStartGame();
-    } else if (gameState === 'playing' && gameManagerRef.current) {
+      console.log('Left tap');
+    } else if (locationX > screenThird * 2) {
+      // Right third - move right
       gameManagerRef.current.handleClickRight();
-      setDebugInfo('RIGHT →');
+      console.log('Right tap');
+    } else {
+      // Center third - handle double tap for jump
+      handleCenterDoubleClick();
     }
   };
 
+  // SUPER FAST double-click detection - optimized for rapid tapping
   const handleCenterDoubleClick = () => {
+    if (gameState !== 'playing' || !gameManagerRef.current) return;
+
     const now = Date.now();
     const timeSinceLastTap = now - lastTapTimeRef.current;
     
-    // More lenient double-click detection (400ms window instead of 300ms)
-    if (timeSinceLastTap < 400) {
-      // Double click detected
-      tapCountRef.current = 0;
-      lastTapTimeRef.current = 0; // Reset to prevent triple-click issues
-      
-      if (gameState === 'playing' && gameManagerRef.current) {
-        console.log('DOUBLE CLICK DETECTED - Attempting jump');
-        gameManagerRef.current.handleDoubleClick();
-        setDebugInfo('↑ JUMP');
-      }
-    } else {
-      // First tap
+    if (tapCountRef.current === 0) {
       tapCountRef.current = 1;
       lastTapTimeRef.current = now;
+      isWaitingForSecondTapRef.current = true;
+      
+      if (doubleClickTimeoutRef.current) {
+        clearTimeout(doubleClickTimeoutRef.current);
+      }
+      
+      doubleClickTimeoutRef.current = setTimeout(() => {
+        tapCountRef.current = 0;
+        isWaitingForSecondTapRef.current = false;
+      }, 350);
+      
+    } else if (tapCountRef.current === 1 && isWaitingForSecondTapRef.current) {
+      console.log(`INSTANT JUMP! (${timeSinceLastTap}ms between taps)`);
+      gameManagerRef.current.handleDoubleClick();
+      
+      tapCountRef.current = 0;
+      lastTapTimeRef.current = 0;
+      isWaitingForSecondTapRef.current = false;
+      
+      if (doubleClickTimeoutRef.current) {
+        clearTimeout(doubleClickTimeoutRef.current);
+        doubleClickTimeoutRef.current = null;
+      }
     }
   };
 
   return (
     <View style={styles.container}>
+      {/* Layer 1: 3D Scene */}
       <GLView 
         style={styles.glView} 
         onContextCreate={onContextCreate}
       />
       
+      {/* Layer 2: Invisible tap zones (BOTTOM LAYER - behind everything) */}
+      {gameState === 'landing' && (
+        <TouchableWithoutFeedback onPress={handleLandingTap}>
+          <View style={styles.tapZone} />
+        </TouchableWithoutFeedback>
+      )}
+
+      {gameState === 'playing' && (
+        <TouchableWithoutFeedback onPress={handleScreenTap}>
+          <View style={styles.tapZone} />
+        </TouchableWithoutFeedback>
+      )}
+      
+      {/* Layer 3: UI Overlays (TOP LAYER - buttons always clickable) */}
       <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="box-none">
         {gameState === 'landing' && (
-          <LandingOverlay tapHintOpacity={tapHintAnim} />
+          <LandingOverlay 
+            tapHintOpacity={tapHintAnim}
+            selectedCube={selectedCube}
+            onOpenCubeSelector={handleOpenCubeSelector}
+            onOpenMenu={() => {
+              console.log('Opening menu');
+              setMenuVisible(true);
+            }}
+          />
         )}
 
         {gameState === 'playing' && (
@@ -154,137 +261,38 @@ export default function Game3D() {
         {gameState === 'gameOver' && (
           <GameOverOverlay score={finalScore} onRestart={handleRestart} />
         )}
-
-        {/* Debug overlay */}
-        {gameState === 'playing' && __DEV__ && (
-          <View style={styles.debugContainer} pointerEvents="none">
-            <Text style={styles.debugText}>{debugInfo}</Text>
-            <Text style={styles.debugText}>Click L/R to move</Text>
-            <Text style={styles.debugText}>Double-click center to jump</Text>
-          </View>
-        )}
       </Animated.View>
 
-      {/* Control Areas - Only visible during gameplay */}
-      {gameState === 'playing' && (
-        <>
-          {/* Left side button */}
-          <TouchableOpacity 
-            style={styles.leftButton}
-            onPress={handleLeftClick}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.buttonText}>←</Text>
-          </TouchableOpacity>
-
-          {/* Center button for double-click jump */}
-          <TouchableOpacity 
-            style={styles.centerButton}
-            onPress={handleCenterDoubleClick}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.buttonText}>↑↑</Text>
-          </TouchableOpacity>
-
-          {/* Right side button */}
-          <TouchableOpacity 
-            style={styles.rightButton}
-            onPress={handleRightClick}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.buttonText}>→</Text>
-          </TouchableOpacity>
-        </>
-      )}
-
-      {/* Full screen tap area for landing */}
-      {gameState === 'landing' && (
-        <TouchableOpacity 
-          style={styles.fullScreenTap}
-          onPress={handleStartGame}
-          activeOpacity={1}
+      {/* Layer 4: Modals (HIGHEST LAYER - ALWAYS RENDERED, visibility controlled by Modal component) */}
+      <View style={styles.modalLayer} pointerEvents={cubeSelectorVisible ? 'auto' : 'none'}>
+        <CubeSelector
+          visible={cubeSelectorVisible}
+          selectedCube={selectedCube}
+          onSelectCube={handleSelectCube}
+          onClose={handleCloseCubeSelector}
         />
-      )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: '#000000',
   },
   glView: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
+  },
+  tapZone: {
+    ...StyleSheet.absoluteFillObject,
   },
   overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
   },
-  debugContainer: {
-    position: 'absolute',
-    bottom: 200,
-    left: 20,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 10,
-    borderRadius: 5,
-  },
-  debugText: {
-    color: '#00ff00',
-    fontSize: 11,
-    fontFamily: 'monospace',
-  },
-  leftButton: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: SCREEN_WIDTH / 3,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 0, 0, 0.1)',
-  },
-  centerButton: {
-    position: 'absolute',
-    left: SCREEN_WIDTH / 3,
-    top: 0,
-    bottom: 0,
-    width: SCREEN_WIDTH / 3,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 255, 0, 0.1)',
-  },
-  rightButton: {
-    position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
-    width: SCREEN_WIDTH / 3,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 255, 0.1)',
-  },
-  buttonText: {
-    fontSize: 48,
-    color: 'rgba(255, 255, 255, 0.3)',
-    fontWeight: 'bold',
-  },
-  fullScreenTap: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+  modalLayer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 9999,
   },
 });

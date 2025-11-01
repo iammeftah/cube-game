@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
+import { CubeProvider } from '../contexts/CubeContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -20,35 +21,37 @@ export default function RootLayout() {
   }, []);
 
   return (
-    <Stack 
-      screenOptions={{ 
-        headerShown: false,
-        animation: 'fade',
-        animationDuration: 600,
-        contentStyle: { backgroundColor: '#000000' },
-        gestureEnabled: false,
-      }}
-    >
-      <Stack.Screen 
-        name="index"
-        options={{
-          animation: 'none',
-        }}
-      />
-      <Stack.Screen 
-        name="landing"
-        options={{
+    <CubeProvider>
+      <Stack 
+        screenOptions={{ 
+          headerShown: false,
           animation: 'fade',
           animationDuration: 600,
+          contentStyle: { backgroundColor: '#000000' },
+          gestureEnabled: false,
         }}
-      />
-      <Stack.Screen 
-        name="game"
-        options={{
-          animation: 'fade',
-          animationDuration: 800,
-        }}
-      />
-    </Stack>
+      >
+        <Stack.Screen 
+          name="index"
+          options={{
+            animation: 'none',
+          }}
+        />
+        <Stack.Screen 
+          name="landing"
+          options={{
+            animation: 'fade',
+            animationDuration: 600,
+          }}
+        />
+        <Stack.Screen 
+          name="game"
+          options={{
+            animation: 'fade',
+            animationDuration: 800,
+          }}
+        />
+      </Stack>
+    </CubeProvider>
   );
 }

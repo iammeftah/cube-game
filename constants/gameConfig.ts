@@ -6,55 +6,47 @@ export const GAME_CONFIG = {
     NEAR: 0.1,
     FAR: 1000,
     LANDING_POSITION: new THREE.Vector3(8, 12, 14),
-    PLAYING_POSITION: new THREE.Vector3(0, 8, 13),
+    PLAYING_POSITION: new THREE.Vector3(0, 9, 15),
     LANDING_LOOK_AT: new THREE.Vector3(0, 0, -5),
     PLAYING_LOOK_AT: new THREE.Vector3(0, 0, -5),
     ORBIT_RADIUS: 16,
-    ORBIT_SPEED: 0.002,
-    FOLLOW_SMOOTHNESS: 0.1,
+    ORBIT_SPEED: 0.0015,
+    FOLLOW_SMOOTHNESS: 0.08,
   },
 
   SCENE: {
-    BACKGROUND_COLOR: 0x000000, // Pure black
-    FOG_NEAR: 20,
-    FOG_FAR: 60,
+    BACKGROUND_COLOR: 0x000000,
+    FOG_NEAR: 25,
+    FOG_FAR: 70,
   },
 
   LIGHTING: {
-    AMBIENT_INTENSITY: 0.3,
+    AMBIENT_INTENSITY: 0.5,
     DIRECTIONAL_INTENSITY: 0.6,
     DIRECTIONAL_POSITION: new THREE.Vector3(10, 20, 10),
-    RED_LIGHT: {
-      COLOR: 0xff0000, // Blood red
-      INTENSITY: 2.5,
-      DISTANCE: 30,
-      POSITION: new THREE.Vector3(0, 8, -5),
-    },
-    BLUE_LIGHT: {
-      COLOR: 0x8B0000, // Dark red
-      INTENSITY: 1.5,
-      DISTANCE: 25,
-      POSITION: new THREE.Vector3(-5, 6, -15),
-    },
   },
 
+  // gameConfig.ts - UPDATE these values for better jumping
+
+  // gameConfig.ts - KEEP GRAVITY AS IS
+
   PLAYER: {
-    SIZE: 1.2,
-    COLOR: 0xff0000, // Blood red cube
-    EMISSIVE: 0x8B0000,
-    EMISSIVE_INTENSITY: 0.7,
-    METALNESS: 0.4,
-    ROUGHNESS: 0.5,
+    SIZE: 1.0,
+    COLOR: 0xcc0000,
+    EMISSIVE: 0x000000,
+    EMISSIVE_INTENSITY: 0.0,
+    METALNESS: 0.3,
+    ROUGHNESS: 0.7,
     INITIAL_Y: 5,
-    GROUND_OFFSET: 0.6,
+    GROUND_OFFSET: 0.5,
     FALL_THRESHOLD: -20,
     DROP_DURATION: 800,
-    FORWARD_SPEED: 0.15,
-    GRAVITY: 0.03,
-    JUMP_FORCE: 0.55,
-    ROTATION_SPEED: 0.02,
+    FORWARD_SPEED: 0.12,
+    GRAVITY: 0.032, // Keep original
+    JUMP_FORCE: 0.65, // Keep improved jump
+    ROTATION_SPEED: 0.003,
     BOUNCE_SPEED: 2.0,
-    BOUNCE_AMPLITUDE: 0.1,
+    BOUNCE_AMPLITUDE: 0.0,
     LANE_SWITCH_SPEED: 0.2,
     LANE_SPACING: 2.5,
   },
@@ -62,8 +54,8 @@ export const GAME_CONFIG = {
   PATH: {
     WIDTH: 2.0,
     LANE_SPACING: 2.5,
-    SEGMENT_LENGTH: 2.0, // No gaps between tiles
-    VISIBLE_DISTANCE: 50,
+    SEGMENT_LENGTH: 2.0,
+    VISIBLE_DISTANCE: 60,
     CLEANUP_DISTANCE: 20,
     GENERATION_STEP: 2.0,
     CURVE_INTENSITY: 0,
@@ -75,21 +67,21 @@ export const GAME_CONFIG = {
     MIN_GAP_DISTANCE: 10,
     TILE_Y_POSITION: -1,
     TILE_HEIGHT: 0.6,
-    TILE_COLOR: 0x2a2a3e, // Dark blue-gray
-    TILE_EMISSIVE: 0x1a1a2e,
-    TILE_EMISSIVE_INTENSITY: 0.2,
-    EDGE_COLOR: 0xff0000, // Blood red edges
+    TILE_COLOR: 0x2a2a2a,
+    TILE_EMISSIVE: 0x000000,
+    TILE_EMISSIVE_INTENSITY: 0.0,
+    EDGE_COLOR: 0x444444,
   },
 
   PARTICLES: {
-    COUNT: 200,
-    COLOR: 0xff0000, // Blood red particles
-    SIZE: 0.15,
-    OPACITY: 0.5,
-    ROTATION_SPEED: 0.0012,
-    SPREAD_X: 40,
-    SPREAD_Y: 30,
-    SPREAD_Z: 80,
+    COUNT: 150,
+    COLOR: 0x666666,
+    SIZE: 0.12,
+    OPACITY: 0.3,
+    ROTATION_SPEED: 0.001,
+    SPREAD_X: 45,
+    SPREAD_Y: 35,
+    SPREAD_Z: 90,
   },
 
   ANIMATION: {
