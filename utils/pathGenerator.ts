@@ -8,6 +8,7 @@ interface TileData {
   spawnTime: number;
   isAnimating: boolean;
   isAccent: boolean;
+  isSafetyTile: boolean;
 }
 
 export class PathGenerator {
@@ -26,6 +27,11 @@ export class PathGenerator {
   private readonly SPAWN_DURATION = 300;
   private readonly SPAWN_HEIGHT = 6;
   private readonly SPAWN_INTERVAL = 2.0;
+  private readonly SAFETY_TILE_SPAWN_DURATION = 500; // Slower, smoother animation for safety tiles
+
+  private invincibilityMode: boolean = false;
+  private invincibilityEndTime: number = 0;
+  private readonly INVINCIBILITY_DURATION = 5000;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
@@ -39,7 +45,6 @@ export class PathGenerator {
 
   private generateInitialPath(): void {
     let z = 0;
-    // Start with a safe runway
     for (let i = 0; i < 5; i++) {
       this.createTileRow(z, [true, true, true], false);
       z += this.SPAWN_INTERVAL;
@@ -47,16 +52,37 @@ export class PathGenerator {
     
     this.furthestZ = z;
     
-    // Generate initial visible path
     while (this.furthestZ < 30) {
       this.generateNextRowOrganic();
     }
   }
 
   private generateNextRowOrganic(): void {
+    // CRITICAL: Check invincibility status FIRST
+    const now = Date.now();
+    const isCurrentlyInvincible = this.invincibilityMode && now < this.invincibilityEndTime;
+    
+    if (isCurrentlyInvincible) {
+      const timeLeft = this.invincibilityEndTime - now;
+      console.log(`🛡️ INVINCIBLE - Generating PERFECT tile at z: ${this.furthestZ} | Time left: ${Math.ceil(timeLeft / 1000)}s`);
+      
+      // FORCE perfect path - all 3 lanes WITH SAFETY TILE MARKING
+      this.createTileRowWithStagger(this.furthestZ, [true, true, true], false, true);
+      this.lastGeneratedLanes = [true, true, true];
+      this.furthestZ += this.SPAWN_INTERVAL;
+      this.distanceTraveled += this.SPAWN_INTERVAL;
+      return;
+    }
+
+    // Check if invincibility just ended
+    if (this.invincibilityMode && now >= this.invincibilityEndTime) {
+      this.invincibilityMode = false;
+      console.log('⚡ INVINCIBILITY EXPIRED - Returning to normal generation');
+    }
+
+    // Normal generation logic
     const currentActive = this.lastGeneratedLanes.filter(l => l).length;
     const difficulty = Math.min(this.distanceTraveled / 100, 1);
-    
     const isRepeating = this.consecutiveSameConfig > 3;
     
     let newLanes: boolean[];
@@ -69,7 +95,7 @@ export class PathGenerator {
       newLanes = this.generateAdaptive(difficulty);
     }
     
-    this.createTileRowWithStagger(this.furthestZ, newLanes);
+    this.createTileRowWithStagger(this.furthestZ, newLanes, false, false);
     this.updateHistory(newLanes);
     this.furthestZ += this.SPAWN_INTERVAL;
     this.distanceTraveled += this.SPAWN_INTERVAL;
@@ -77,26 +103,21 @@ export class PathGenerator {
 
   private generateAdaptive(difficulty: number): boolean[] {
     const recentOpen = this.countRecentOpenLanes();
-    
     let probabilities = [0.7, 0.75, 0.7];
-    
     probabilities = probabilities.map(p => p - (difficulty * 0.25));
     
     if (recentOpen > 7) {
       probabilities = probabilities.map(p => p - 0.15);
     }
-    
     if (recentOpen < 4) {
       probabilities = probabilities.map(p => p + 0.2);
     }
     
     let lanes = probabilities.map(p => Math.random() < p);
-    
     if (!lanes.some(l => l)) {
       const randomLane = Math.floor(Math.random() * 3);
       lanes[randomLane] = true;
     }
-    
     if (Math.random() < 0.15) {
       lanes = this.getInterestingConfig();
     }
@@ -132,7 +153,6 @@ export class PathGenerator {
     
     const lastConfigStr = this.lastGeneratedLanes.join(',');
     const available = configs.filter(c => c.join(',') !== lastConfigStr);
-    
     return available[Math.floor(Math.random() * available.length)];
   }
 
@@ -143,7 +163,6 @@ export class PathGenerator {
       [true, false, false],
       [false, false, true],
     ];
-    
     return interesting[Math.floor(Math.random() * interesting.length)];
   }
 
@@ -168,7 +187,12 @@ export class PathGenerator {
     this.lastGeneratedLanes = newLanes;
   }
 
-  private createTileRowWithStagger(zPosition: number, lanes: boolean[]): void {
+  private createTileRowWithStagger(
+    zPosition: number, 
+    lanes: boolean[], 
+    useGlitch: boolean = false,
+    isSafetyTile: boolean = false
+  ): void {
     const lanePositions = [-2.5, 0, 2.5];
     const tileSize = 2.0;
     const tileHeight = 0.6;
@@ -186,21 +210,11 @@ export class PathGenerator {
             tileSize, 
             tileHeight, 
             true,
-            isAccent
+            isAccent,
+            false,
+            isSafetyTile
           );
         }, laneIndex * staggerDelay);
-      }
-    });
-  }
-
-  private createTileRow(zPosition: number, lanes: boolean[], animate: boolean = true): void {
-    const lanePositions = [-2.5, 0, 2.5];
-    const tileSize = 2.0;
-    const tileHeight = 0.6;
-    
-    lanes.forEach((hasTile, laneIndex) => {
-      if (hasTile) {
-        this.createTile(lanePositions[laneIndex], zPosition, laneIndex, tileSize, tileHeight, animate, false);
       }
     });
   }
@@ -212,11 +226,13 @@ export class PathGenerator {
     size: number, 
     height: number, 
     animate: boolean, 
-    isAccent: boolean = false
+    isAccent: boolean = false,
+    isGlitch: boolean = false,
+    isSafetyTile: boolean = false
   ): void {
-    const color = isAccent ? 0xcc0000 : GAME_CONFIG.PATH.TILE_COLOR;
-    const emissive = isAccent ? 0x440000 : GAME_CONFIG.PATH.TILE_EMISSIVE;
-    const emissiveIntensity = isAccent ? 0.3 : GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY;
+    let color = isAccent ? 0xcc0000 : GAME_CONFIG.PATH.TILE_COLOR;
+    let emissive = isAccent ? 0x440000 : GAME_CONFIG.PATH.TILE_EMISSIVE;
+    let emissiveIntensity = isAccent ? 0.3 : GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY;
     
     const geometry = new THREE.BoxGeometry(size, height, size);
     const material = new THREE.MeshStandardMaterial({
@@ -231,20 +247,25 @@ export class PathGenerator {
     
     const mesh = new THREE.Mesh(geometry, material);
     
-    if (animate) {
+    // Safety tiles slide up from BELOW instead of falling from above
+    if (animate && isSafetyTile) {
+      mesh.position.set(xPos, this.TILE_Y_POSITION - this.SPAWN_HEIGHT, -zPos);
+    } else if (animate) {
       mesh.position.set(xPos, this.TILE_Y_POSITION + this.SPAWN_HEIGHT, -zPos);
     } else {
       mesh.position.set(xPos, this.TILE_Y_POSITION, -zPos);
     }
     
-    const edgeColor = isAccent ? 0xff4444 : GAME_CONFIG.PATH.EDGE_COLOR;
-    const edgeOpacity = isAccent ? 0.7 : 0.4;
+    // Safety tiles ALWAYS get bright green borders
+    const edgeColor = isSafetyTile ? 0x00ff00 : (isAccent ? 0xff4444 : GAME_CONFIG.PATH.EDGE_COLOR);
+    const edgeOpacity = isSafetyTile ? 0.9 : (isAccent ? 0.7 : 0.4);
     
     const edges = new THREE.EdgesGeometry(geometry);
     const lineMaterial = new THREE.LineBasicMaterial({ 
       color: edgeColor,
       transparent: true,
       opacity: animate ? 0 : edgeOpacity,
+      linewidth: isSafetyTile ? 2 : 1,
     });
     const lineSegments = new THREE.LineSegments(edges, lineMaterial);
     mesh.add(lineSegments);
@@ -258,6 +279,19 @@ export class PathGenerator {
       spawnTime: animate ? Date.now() : 0,
       isAnimating: animate,
       isAccent: isAccent,
+      isSafetyTile: isSafetyTile,
+    });
+  }
+
+  private createTileRow(zPosition: number, lanes: boolean[], animate: boolean = true): void {
+    const lanePositions = [-2.5, 0, 2.5];
+    const tileSize = 2.0;
+    const tileHeight = 0.6;
+    
+    lanes.forEach((hasTile, laneIndex) => {
+      if (hasTile) {
+        this.createTile(lanePositions[laneIndex], zPosition, laneIndex, tileSize, tileHeight, animate, false, false, false);
+      }
     });
   }
 
@@ -267,20 +301,32 @@ export class PathGenerator {
     const now = Date.now();
     this.tiles.forEach(tile => {
       if (tile.isAnimating) {
+        // Use different duration for safety tiles (smoother, slower)
+        const duration = tile.isSafetyTile ? this.SAFETY_TILE_SPAWN_DURATION : this.SPAWN_DURATION;
         const elapsed = now - tile.spawnTime;
-        const progress = Math.min(elapsed / this.SPAWN_DURATION, 1);
+        const progress = Math.min(elapsed / duration, 1);
         
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         
-        const startY = this.TILE_Y_POSITION + this.SPAWN_HEIGHT;
-        const endY = this.TILE_Y_POSITION;
+        // Safety tiles slide UP from below, regular tiles fall DOWN from above
+        let startY: number;
+        let endY: number;
+        
+        if (tile.isSafetyTile) {
+          startY = this.TILE_Y_POSITION - this.SPAWN_HEIGHT;
+          endY = this.TILE_Y_POSITION;
+        } else {
+          startY = this.TILE_Y_POSITION + this.SPAWN_HEIGHT;
+          endY = this.TILE_Y_POSITION;
+        }
+        
         tile.mesh.position.y = startY + (endY - startY) * easeProgress;
         
         if (tile.mesh.material instanceof THREE.MeshStandardMaterial) {
           tile.mesh.material.opacity = easeProgress;
         }
         
-        const targetEdgeOpacity = tile.isAccent ? 0.7 : 0.4;
+        const targetEdgeOpacity = tile.isSafetyTile ? 0.9 : (tile.isAccent ? 0.7 : 0.4);
         tile.mesh.children.forEach(child => {
           if (child instanceof THREE.LineSegments && child.material instanceof THREE.LineBasicMaterial) {
             child.material.opacity = targetEdgeOpacity * easeProgress;
@@ -321,6 +367,7 @@ export class PathGenerator {
       });
     });
     
+    // Generate new tiles as player moves forward
     while (this.furthestZ < playerDistance + 44) {
       this.generateNextRowOrganic();
     }
@@ -401,6 +448,68 @@ export class PathGenerator {
     };
   }
 
+  private fillMissingTilesAhead(playerZ: number): void {
+    const lanePositions = [-2.5, 0, 2.5];
+    
+    // Start from current player position, fill ahead
+    let startZ = Math.ceil(playerZ / this.SPAWN_INTERVAL) * this.SPAWN_INTERVAL;
+    const fillDistance = 40; // Fill 40 units ahead
+    const endZ = startZ + fillDistance;
+    
+    console.log(`🔧 Filling missing tiles from z: ${startZ} to ${endZ}`);
+    
+    let tilesCreated = 0;
+    let currentZ = startZ;
+    
+    while (currentZ < endZ) {
+      const existingTiles = this.tiles.filter(tile => 
+        Math.abs(tile.zPosition - currentZ) < 0.1
+      );
+      
+      const existingLanes = new Set(existingTiles.map(t => t.lane));
+      
+      // Fill missing lanes with GREEN-BORDERED safety tiles that SLIDE UP
+      for (let lane = 0; lane < 3; lane++) {
+        if (!existingLanes.has(lane)) {
+          this.createTile(
+            lanePositions[lane],
+            currentZ,
+            lane,
+            2.0,
+            0.6,
+            true,  // WITH ANIMATION - slide up from below
+            false, // Not accent
+            false, // Not glitch
+            true   // IS A SAFETY TILE - gets green border and slides up!
+          );
+          tilesCreated++;
+        }
+      }
+      
+      currentZ += this.SPAWN_INTERVAL;
+    }
+    
+    console.log(`✅ Created ${tilesCreated} safety tiles with GREEN BORDERS sliding up`);
+  }
+
+  activateInvincibility(playerZ: number): void {
+    const now = Date.now();
+    this.invincibilityMode = true;
+    this.invincibilityEndTime = now + this.INVINCIBILITY_DURATION;
+    
+    console.log(`🌟✨ INVINCIBILITY ACTIVATED!`);
+    console.log(`   Player at z: ${playerZ}`);
+    console.log(`   Will end at: ${new Date(this.invincibilityEndTime).toLocaleTimeString()}`);
+    console.log(`   Duration: ${this.INVINCIBILITY_DURATION}ms (${this.INVINCIBILITY_DURATION / 1000}s)`);
+    
+    // Fill all gaps immediately with animated green-bordered safety tiles
+    this.fillMissingTilesAhead(playerZ);
+  }
+
+  isInvincible(): boolean {
+    return this.invincibilityMode && Date.now() < this.invincibilityEndTime;
+  }
+
   cleanup(): void {
     this.tiles.forEach(tile => {
       this.scene.remove(tile.mesh);
@@ -421,5 +530,7 @@ export class PathGenerator {
     this.consecutiveSameConfig = 0;
     this.recentConfigurations = [];
     this.distanceTraveled = 0;
+    this.invincibilityMode = false;
+    this.invincibilityEndTime = 0;
   }
 }

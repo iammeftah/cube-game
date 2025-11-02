@@ -28,12 +28,38 @@ export default function Game3D() {
   
   const gameManagerRef = useRef<GameManager | null>(null);
   const gameStateRef = useRef<GameState>('landing');
+
+  const [isInvincible, setIsInvincible] = useState(false);
+  const [invincibilityTimeLeft, setInvincibilityTimeLeft] = useState(0);
   
-  // Double tap detection
   const lastTapTime = useRef<number>(0);
   
   useEffect(() => {
     gameStateRef.current = gameState;
+  }, [gameState]);
+
+  useEffect(() => {
+    if (gameState !== 'playing') {
+      setIsInvincible(false);
+      setInvincibilityTimeLeft(0);
+      return;
+    }
+    
+    const interval = setInterval(() => {
+      if (gameManagerRef.current) {
+        const timeLeft = gameManagerRef.current.getInvincibilityTimeLeft();
+        
+        if (timeLeft > 0) {
+          setIsInvincible(true);
+          setInvincibilityTimeLeft(timeLeft);
+        } else {
+          setIsInvincible(false);
+          setInvincibilityTimeLeft(0);
+        }
+      }
+    }, 100);
+    
+    return () => clearInterval(interval);
   }, [gameState]);
   
   const SWIPE_THRESHOLD = 30;
@@ -103,6 +129,8 @@ export default function Game3D() {
     setGameState('landing');
     setScore(0);
     setFinalScore(0);
+    setIsInvincible(false);
+    setInvincibilityTimeLeft(0);
   };
 
   const handleOpenCubeSelector = () => {
@@ -149,7 +177,7 @@ export default function Game3D() {
             return;
           }
 
-          const leftButtonArea = { left: 0, right: 80, top: 40, bottom: 220 };
+          const leftButtonArea = { left: 0, right : 80, top: 40, bottom: 220 };
           const rightButtonArea = { left: SCREEN_WIDTH - 80, right: SCREEN_WIDTH, top: 40, bottom: 120 };
 
           if (
@@ -195,7 +223,7 @@ export default function Game3D() {
             gameManagerRef.current.handleSwipeUp();
           }
           else if (dy > SWIPE_THRESHOLD && absY > absX && absVy > SWIPE_VELOCITY_THRESHOLD) {
-            // NEW: Swipe DOWN - Fast fall / Cancel jump
+            // Swipe DOWN - Fast fall
             gameManagerRef.current.handleSwipeDown();
           }
           else if (dx < -SWIPE_THRESHOLD && absX > absY && absVx > SWIPE_VELOCITY_THRESHOLD) {
@@ -235,7 +263,12 @@ export default function Game3D() {
         )}
 
         {gameState === 'playing' && (
-          <PlayingOverlay score={score} onQuit={handleRestart} />
+          <PlayingOverlay 
+            score={score} 
+            onQuit={handleRestart}
+            isInvincible={isInvincible}
+            invincibilityTimeLeft={invincibilityTimeLeft}
+          />
         )}
 
         {gameState === 'gameOver' && (

@@ -1,5 +1,6 @@
 import { GAME_CONFIG } from '@/constants/gameConfig';
 import { CubeDefinition } from '@/utils/cubeDefinition';
+import { Star } from '@/utils/Star';
 import { ExpoWebGLRenderingContext } from 'expo-gl';
 import { Renderer } from 'expo-three';
 import * as THREE from 'three';
@@ -31,6 +32,14 @@ export class GameManager {
   private score: number = 0;
   private onScoreUpdate: ((score: number) => void) | null = null;
   private onGameOver: ((finalScore: number) => void) | null = null;
+
+  private star: Star | null = null;
+  private lastStarSpawnZ: number = 0;
+  private readonly STAR_SPAWN_INTERVAL = 50;
+  private readonly STAR_SCORE_VALUE = 100;
+  private isInvincible: boolean = false;
+  private invincibilityEndTime: number = 0;
+  private readonly INVINCIBILITY_DURATION = 5000;
 
   constructor() {
     this.animationManager = new AnimationManager();
@@ -69,9 +78,10 @@ export class GameManager {
     this.particles = createParticles();
     this.scene.add(this.particles);
 
-    // Initialize boost particle system
     this.boostParticleSystem = new BoostParticleSystem(this.scene);
     this.boostParticleSystem.setPlayerReference(this.player);
+
+    this.star = new Star(this.scene);
 
     this.startAnimationLoop(gl);
   }
@@ -136,11 +146,12 @@ export class GameManager {
         this.animationManager.animateParticles(this.particles);
       }
 
-      // Update boost particle system
+      if (this.star && this.gameState === 'playing') {
+        this.star.update(this.animationManager.getTime(), this.playerController?.getPlayerZ() || 0);
+      }
+
       if (this.boostParticleSystem && this.playerController) {
         const isBoosting = this.playerController.isCurrentlyBoosting();
-        
-        // Pass speed multiplier
         const speedMultiplier = this.playerController.getBoostSpeedMultiplier();
         this.boostParticleSystem.setSpeedMultiplier(speedMultiplier);
         
@@ -161,7 +172,7 @@ export class GameManager {
         this.cameraController.updateFollowPlayer();
       }
 
-      if (this.gameState === 'playing' && this.playerController && this.pathGenerator) {
+      if (this.gameState === 'playing' && this.playerController && this.pathGenerator && this.star) {
         if (this.playerController.isPlayerActive()) {
           const firstSegment = this.pathGenerator.getFirstSegment();
           if (firstSegment) {
@@ -171,7 +182,44 @@ export class GameManager {
           this.playerController.updateHorizontalPosition();
           this.playerController.updateForward();
           
-          const playerZ = this.playerController.getPlayerZ();
+          // Check for star collection
+          const collectedStar = this.star.checkCollection(
+            this.playerController.getPlayerX(),
+            this.player!.position.y,
+            this.playerController.getPlayerZ()
+          );
+          
+          // In the star collection section, update this:
+          // Update only the star collection section:
+          if (collectedStar) {
+            // Add score
+            this.score += this.STAR_SCORE_VALUE;
+            if (this.onScoreUpdate) {
+              this.onScoreUpdate(this.score);
+            }
+            
+            // Activate invincibility with CURRENT player position
+            const playerZ = Math.abs(this.playerController.getPlayerZ());
+            this.pathGenerator.activateInvincibility(playerZ);
+            this.isInvincible = true;
+            this.invincibilityEndTime = Date.now() + this.INVINCIBILITY_DURATION;
+            
+            console.log(`⭐ STAR COLLECTED! +100 SCORE | Player at z: ${playerZ} | INVINCIBILITY ACTIVE!`);
+          }
+          
+          // Check and update invincibility status
+          if (this.isInvincible && Date.now() >= this.invincibilityEndTime) {
+            this.isInvincible = false;
+            console.log('⚡ INVINCIBILITY ENDED!');
+          }
+          
+          // Spawn new stars periodically
+          const playerZ = Math.abs(this.playerController.getPlayerZ());
+          if (playerZ - this.lastStarSpawnZ > this.STAR_SPAWN_INTERVAL) {
+            this.spawnStar(playerZ);
+            this.lastStarSpawnZ = playerZ;
+          }
+          
           this.pathGenerator.update(playerZ);
 
           const collisionCheck = this.pathGenerator.checkCollision(
@@ -227,9 +275,18 @@ export class GameManager {
 
   handleDoubleTap(): void {
     if (this.gameState !== 'playing' || !this.playerController) return;
-    
     this.playerController.activateBoost();
-    // Particle spawning will be handled automatically in the animation loop
+  }
+
+  private spawnStar(playerZ: number): void {
+    if (!this.star) return;
+    
+    const laneIndex = Math.floor(Math.random() * 3);
+    const lanePositions = [-2.5, 0, 2.5];
+    const spawnZ = playerZ + 30 + Math.random() * 20;
+    
+    this.star.createStar(lanePositions[laneIndex], -1.0, spawnZ);
+    console.log(`🌟 Star spawned at lane ${laneIndex}, z: ${spawnZ}`);
   }
 
   private handleGameOver(): void {
@@ -251,6 +308,8 @@ export class GameManager {
     this.isTransitioning = true;
     this.gameState = 'playing';
     this.score = 0;
+    this.isInvincible = false;
+    this.invincibilityEndTime = 0;
     
     if (this.onScoreUpdate) {
       this.onScoreUpdate(0);
@@ -291,6 +350,8 @@ export class GameManager {
     this.isTransitioning = false;
     this.gameState = 'landing';
     this.score = 0;
+    this.isInvincible = false;
+    this.invincibilityEndTime = 0;
 
     if (this.cameraController) {
       this.cameraController.stopFollowing();
@@ -310,6 +371,12 @@ export class GameManager {
     if (this.boostParticleSystem) {
       this.boostParticleSystem.cleanup();
     }
+    
+    if (this.star) {
+      this.star.cleanup();
+    }
+    
+    this.lastStarSpawnZ = 0;
   }
 
   getGameState(): GameState {
@@ -318,6 +385,14 @@ export class GameManager {
 
   getScore(): number {
     return this.score;
+  }
+
+  getInvincibilityTimeLeft(): number {
+    if (!this.isInvincible || Date.now() >= this.invincibilityEndTime) {
+      this.isInvincible = false;
+      return 0;
+    }
+    return this.invincibilityEndTime - Date.now();
   }
 
   cleanup(): void {
@@ -331,6 +406,10 @@ export class GameManager {
 
     if (this.boostParticleSystem) {
       this.boostParticleSystem.cleanup();
+    }
+
+    if (this.star) {
+      this.star.cleanup();
     }
 
     if (this.scene) {
