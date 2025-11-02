@@ -103,7 +103,6 @@ const styles = StyleSheet.create({
     color: '#ffd700',
     letterSpacing: 2,
     textAlign: 'center',
-    textShadowColor: '#ffd700',
     textShadowOffset: { width: 0, height: 0 },
     textShadowRadius: 10,
   },
@@ -116,7 +115,6 @@ const styles = StyleSheet.create({
   },
   invincibilityBarFill: {
     height: '100%',
-    backgroundColor: '#ffd700',
     borderRadius: 2,
   },
 });

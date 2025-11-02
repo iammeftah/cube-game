@@ -14,7 +14,7 @@ export class Star {
   private scene: THREE.Scene;
   private stars: StarData[] = [];
   private readonly STAR_SIZE = 0.5;
-  private readonly STAR_COLOR = 0xffdd00;
+  private readonly STAR_COLOR = 0xffd700;
   private readonly STAR_EMISSIVE = 0xffaa00;
   private readonly COLLECTION_DISTANCE = 1.2;
 
@@ -23,15 +23,15 @@ export class Star {
   }
 
   createStar(x: number, y: number, z: number): StarData {
-    // Create star geometry (8-pointed star)
+    // Create 5-pointed star shape (like the image)
     const starShape = new THREE.Shape();
     const outerRadius = this.STAR_SIZE;
-    const innerRadius = this.STAR_SIZE * 0.4;
-    const points = 8;
+    const innerRadius = this.STAR_SIZE * 0.3; // Classic star ratio
+    const points = 5;
 
     for (let i = 0; i < points * 2; i++) {
       const radius = i % 2 === 0 ? outerRadius : innerRadius;
-      const angle = (i * Math.PI) / points;
+      const angle = (i * Math.PI) / points - Math.PI / 2; // Start from top
       const px = Math.cos(angle) * radius;
       const py = Math.sin(angle) * radius;
       
@@ -43,33 +43,38 @@ export class Star {
     }
     starShape.closePath();
 
+    // Extrude settings for 3D depth and beveled edges
     const extrudeSettings = {
-      depth: 0.2,
+      depth: 0.15,
       bevelEnabled: true,
-      bevelThickness: 0.05,
-      bevelSize: 0.05,
-      bevelSegments: 3,
+      bevelThickness: 0.08,
+      bevelSize: 0.08,
+      bevelSegments: 5,
     };
 
     const geometry = new THREE.ExtrudeGeometry(starShape, extrudeSettings);
+    
+    // Gold metallic material like the reference image
     const material = new THREE.MeshStandardMaterial({
       color: this.STAR_COLOR,
       emissive: this.STAR_EMISSIVE,
-      emissiveIntensity: 0.8,
-      metalness: 0.6,
+      emissiveIntensity: 0.4,
+      metalness: 0.9,
       roughness: 0.2,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.set(x, y + 1.5, -z);
-    mesh.rotation.x = Math.PI / 2;
+    
+    // Orientation: upside down (180 degrees on X) and spinning on Y
+    mesh.rotation.x = Math.PI; // 180 degrees = upside down
 
-    // Add glow effect
-    const glowGeometry = new THREE.SphereGeometry(this.STAR_SIZE * 1.3, 16, 16);
+    // Add subtle glow effect
+    const glowGeometry = new THREE.SphereGeometry(this.STAR_SIZE * 1.5, 16, 16);
     const glowMaterial = new THREE.MeshBasicMaterial({
       color: this.STAR_COLOR,
       transparent: true,
-      opacity: 0.3,
+      opacity: 0.2,
       blending: THREE.AdditiveBlending,
     });
     const glow = new THREE.Mesh(glowGeometry, glowMaterial);
@@ -82,13 +87,43 @@ export class Star {
       position: new THREE.Vector3(x, y + 1.5, z),
       zPosition: z,
       collected: false,
-      rotationSpeed: 0.02 + Math.random() * 0.01,
+      rotationSpeed: 0.05 + Math.random() * 0.03, // Fast spin like a coin
       floatOffset: Math.random() * Math.PI * 2,
-      floatSpeed: 0.03 + Math.random() * 0.01,
+      floatSpeed: 0.025 + Math.random() * 0.01,
     };
 
     this.stars.push(starData);
     return starData;
+  }
+
+  // NEW: Method to spawn stars only on tiles
+  spawnStarsOnTiles(tiles: Array<{ lane: number; zPosition: number; isAnimating: boolean }>): void {
+    const lanePositions = [-2.5, 0, 2.5];
+    const STAR_SPAWN_CHANCE = 0.12; // 15% chance to spawn a star on any tile
+    const TILE_Y_POSITION = -1.0;
+    
+    tiles.forEach(tile => {
+      // Don't spawn stars on animating tiles (they're still spawning)
+      if (tile.isAnimating) return;
+      
+      // Check if star already exists at this position
+      const existingStar = this.stars.find(star => 
+        Math.abs(star.zPosition - tile.zPosition) < 0.5 &&
+        Math.abs(star.position.x - lanePositions[tile.lane]) < 0.5
+      );
+      
+      // Don't spawn if star already exists here
+      if (existingStar) return;
+      
+      // Random chance to spawn a star
+      if (Math.random() < STAR_SPAWN_CHANCE) {
+        this.createStar(
+          lanePositions[tile.lane],
+          TILE_Y_POSITION,
+          tile.zPosition
+        );
+      }
+    });
   }
 
   update(time: number, playerZ: number): void {
@@ -97,8 +132,9 @@ export class Star {
     this.stars.forEach((star) => {
       if (star.collected) return;
 
-      // Rotate star
-      star.mesh.rotation.z += star.rotationSpeed;
+      // Rotate star around Y axis - COIN SPIN! (front -> edge -> back -> edge)
+      star.mesh.rotation.x = 180 * (Math.PI / 180);
+      star.mesh.rotation.y += star.rotationSpeed;
 
       // Float animation
       const floatY = Math.sin(time * star.floatSpeed + star.floatOffset) * 0.2;
@@ -107,11 +143,11 @@ export class Star {
       // Pulse glow
       const glow = star.mesh.children[0];
       if (glow && glow instanceof THREE.Mesh) {
-        const pulseFactor = 0.5 + Math.sin(time * 0.05) * 0.3;
+        const pulseFactor = 0.5 + Math.sin(time * 0.04) * 0.3;
         if (glow.material instanceof THREE.MeshBasicMaterial) {
-          glow.material.opacity = 0.2 + pulseFactor * 0.2;
+          glow.material.opacity = 0.15 + pulseFactor * 0.15;
         }
-        glow.scale.setScalar(0.8 + pulseFactor * 0.4);
+        glow.scale.setScalar(0.9 + pulseFactor * 0.3);
       }
     });
 
@@ -166,19 +202,19 @@ export class Star {
       const scale = 1 + progress * 3;
       star.mesh.scale.set(scale, scale, scale);
 
-      // Spin during collection
-      star.mesh.rotation.z += 0.3;
+      // Spin even faster during collection - coin spin!
+      star.mesh.rotation.y += 0.4;
 
       if (star.mesh.material instanceof THREE.MeshStandardMaterial) {
         star.mesh.material.opacity = 1 - progress;
         star.mesh.material.transparent = true;
-        star.mesh.material.emissiveIntensity = 1.5 - progress * 0.7;
+        star.mesh.material.emissiveIntensity = 1.2 - progress * 0.8;
       }
 
       const glow = star.mesh.children[0];
       if (glow && glow instanceof THREE.Mesh && glow.material instanceof THREE.MeshBasicMaterial) {
-        glow.material.opacity = (1 - progress) * 0.6;
-        glow.scale.setScalar(1 + progress * 2);
+        glow.material.opacity = (1 - progress) * 0.5;
+        glow.scale.setScalar(1 + progress * 2.5);
       }
 
       if (progress < 1) {
@@ -196,11 +232,11 @@ export class Star {
   }
 
   private createBurstEffect(position: THREE.Vector3): void {
-    // Create small particle burst for visual feedback
-    const particleCount = 12;
+    // Create golden particle burst for visual feedback
+    const particleCount = 15;
 
     for (let i = 0; i < particleCount; i++) {
-      const geometry = new THREE.SphereGeometry(0.1, 8, 8);
+      const geometry = new THREE.SphereGeometry(0.08, 8, 8);
       const material = new THREE.MeshBasicMaterial({
         color: this.STAR_COLOR,
         transparent: true,
@@ -212,24 +248,24 @@ export class Star {
       this.scene.add(particle);
 
       const angle = (i / particleCount) * Math.PI * 2;
-      const speed = 0.15;
+      const speed = 0.12 + Math.random() * 0.08;
       const vx = Math.cos(angle) * speed;
-      const vy = Math.sin(angle) * speed;
-      const vz = (Math.random() - 0.5) * speed;
+      const vy = (Math.random() - 0.3) * speed;
+      const vz = Math.sin(angle) * speed;
 
       const startTime = Date.now();
-      const duration = 600;
+      const duration = 500;
 
       const animateParticle = () => {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        particle.position.x += vx;
-        particle.position.y += vy;
-        particle.position.z += vz;
+        particle.position.x += vx * (1 - progress * 0.5);
+        particle.position.y += vy * (1 - progress * 0.5);
+        particle.position.z += vz * (1 - progress * 0.5);
         
         material.opacity = 1 - progress;
-        particle.scale.setScalar(1 - progress * 0.5);
+        particle.scale.setScalar(1 - progress * 0.7);
 
         if (progress < 1) {
           requestAnimationFrame(animateParticle);

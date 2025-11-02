@@ -497,10 +497,6 @@ export class PathGenerator {
     this.invincibilityMode = true;
     this.invincibilityEndTime = now + this.INVINCIBILITY_DURATION;
     
-    console.log(`🌟✨ INVINCIBILITY ACTIVATED!`);
-    console.log(`   Player at z: ${playerZ}`);
-    console.log(`   Will end at: ${new Date(this.invincibilityEndTime).toLocaleTimeString()}`);
-    console.log(`   Duration: ${this.INVINCIBILITY_DURATION}ms (${this.INVINCIBILITY_DURATION / 1000}s)`);
     
     // Fill all gaps immediately with animated green-bordered safety tiles
     this.fillMissingTilesAhead(playerZ);
@@ -508,6 +504,10 @@ export class PathGenerator {
 
   isInvincible(): boolean {
     return this.invincibilityMode && Date.now() < this.invincibilityEndTime;
+  }
+
+  getTiles() {
+    return this.tiles;
   }
 
   cleanup(): void {
