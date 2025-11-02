@@ -5,6 +5,7 @@ import { Renderer } from 'expo-three';
 import * as THREE from 'three';
 import { GameState } from '../types/game.types';
 import { AnimationManager } from '../utils/animationManager';
+import { BoostParticleSystem } from '../utils/BoostParticleSystem';
 import { CameraController } from '../utils/cameraController';
 import { createParticles, createPlayerWithType } from '../utils/gameObjects';
 import { PathGenerator } from '../utils/pathGenerator';
@@ -22,6 +23,7 @@ export class GameManager {
   private animationManager: AnimationManager;
   private pathGenerator: PathGenerator | null = null;
   private playerController: PlayerController | null = null;
+  private boostParticleSystem: BoostParticleSystem | null = null;
   
   private gameState: GameState = 'landing';
   private isTransitioning: boolean = false;
@@ -67,26 +69,21 @@ export class GameManager {
     this.particles = createParticles();
     this.scene.add(this.particles);
 
+    // Initialize boost particle system
+    this.boostParticleSystem = new BoostParticleSystem(this.scene);
+    this.boostParticleSystem.setPlayerReference(this.player);
+
     this.startAnimationLoop(gl);
   }
 
-  // NEW METHOD: Update player cube type
   updatePlayerCube(cubeType: CubeDefinition): void {
-    if (!this.player || !this.scene) {
-      console.warn('Cannot update player cube: player or scene not initialized');
-      return;
-    }
+    if (!this.player || !this.scene) return;
     
-    console.log('Updating player cube to:', cubeType.name);
-    
-    // Store current position and rotation
     const currentPosition = this.player.position.clone();
     const currentRotation = this.player.rotation.clone();
     
-    // Remove old player from scene
     this.scene.remove(this.player);
     
-    // Dispose of old geometry and material
     if (this.player.geometry) {
       this.player.geometry.dispose();
     }
@@ -94,7 +91,6 @@ export class GameManager {
       this.player.material.dispose();
     }
     
-    // Dispose of edge lines if they exist
     this.player.children.forEach(child => {
       if (child instanceof THREE.LineSegments) {
         if (child.geometry) child.geometry.dispose();
@@ -102,27 +98,24 @@ export class GameManager {
       }
     });
     
-    // Create new player with selected cube type
     this.player = createPlayerWithType(cubeType);
     
-    // Restore position and rotation
     this.player.position.copy(currentPosition);
     this.player.rotation.copy(currentRotation);
     
-    // Add to scene
     this.scene.add(this.player);
     
-    // Update player controller reference
     if (this.playerController) {
       this.playerController.updatePlayerReference(this.player);
     }
     
-    // Update camera controller reference
     if (this.cameraController) {
       this.cameraController.setPlayerReference(this.player);
     }
-    
-    console.log('Player cube updated successfully to:', cubeType.name);
+
+    if (this.boostParticleSystem) {
+      this.boostParticleSystem.setPlayerReference(this.player);
+    }
   }
 
   private startAnimationLoop(gl: ExpoWebGLRenderingContext): void {
@@ -131,22 +124,33 @@ export class GameManager {
       
       this.animationManager.updateTime();
 
-      // PERFORMANCE FIX: Only animate on landing screen
       if (this.player && this.gameState === 'landing') {
-        // Gentle floating animation - cube stays perfectly still rotationally
         this.player.position.y = GAME_CONFIG.PLAYER.INITIAL_Y + 
           Math.sin(this.animationManager.getTime() * GAME_CONFIG.PLAYER.BOUNCE_SPEED) * 
           GAME_CONFIG.PLAYER.BOUNCE_AMPLITUDE;
         
-        // Keep rotation locked at zero
         this.player.rotation.set(0, 0, 0);
       }
 
-      // PERFORMANCE FIX: NO player animations during gameplay
-      // Physics and rotation are handled by PlayerController only
-
       if (this.particles) {
         this.animationManager.animateParticles(this.particles);
+      }
+
+      // Update boost particle system
+      if (this.boostParticleSystem && this.playerController) {
+        const isBoosting = this.playerController.isCurrentlyBoosting();
+        
+        // Pass speed multiplier
+        const speedMultiplier = this.playerController.getBoostSpeedMultiplier();
+        this.boostParticleSystem.setSpeedMultiplier(speedMultiplier);
+        
+        if (isBoosting && !this.boostParticleSystem.isActivelySpawning()) {
+          this.boostParticleSystem.startSpawning();
+        } else if (!isBoosting && this.boostParticleSystem.isActivelySpawning()) {
+          this.boostParticleSystem.stopSpawning();
+        }
+        
+        this.boostParticleSystem.update();
       }
 
       if (!this.isTransitioning && this.gameState === 'landing' && this.cameraController) {
@@ -164,7 +168,6 @@ export class GameManager {
             this.playerController.setPathCurveOffset(firstSegment.centerX);
           }
           
-          // PERFORMANCE FIX: Update in correct order for smooth movement
           this.playerController.updateHorizontalPosition();
           this.playerController.updateForward();
           
@@ -176,12 +179,10 @@ export class GameManager {
             playerZ
           );
 
-          // Update physics BEFORE rotation to prevent jitter
           const playerState = this.playerController.updatePhysics(collisionCheck);
           this.playerController.updateRotation();
 
           if (playerState === 'dead') {
-            console.log('Player died! Final score:', this.score);
             this.handleGameOver();
           } else if (playerState === 'playing') {
             const newScore = Math.floor(Math.abs(playerZ) / 2.5);
@@ -204,35 +205,41 @@ export class GameManager {
     animate();
   }
 
-  handleClickLeft(): void {
-    console.log('GameManager: handleClickLeft called');
+  handleSwipeLeft(): void {
     if (this.gameState !== 'playing' || !this.playerController) return;
-    this.playerController.handleClickLeft();
+    this.playerController.handleSwipeLeft();
   }
 
-  handleClickRight(): void {
-    console.log('GameManager: handleClickRight called');
+  handleSwipeRight(): void {
     if (this.gameState !== 'playing' || !this.playerController) return;
-    this.playerController.handleClickRight();
+    this.playerController.handleSwipeRight();
   }
 
-  handleDoubleClick(): void {
-    console.log('GameManager: handleDoubleClick for jump');
+  handleSwipeUp(): void {
     if (this.gameState !== 'playing' || !this.playerController) return;
     this.playerController.handleJump();
   }
 
-  
+  handleSwipeDown(): void {
+    if (this.gameState !== 'playing' || !this.playerController) return;
+    this.playerController.handleFastFall();
+  }
+
+  handleDoubleTap(): void {
+    if (this.gameState !== 'playing' || !this.playerController) return;
+    
+    this.playerController.activateBoost();
+    // Particle spawning will be handled automatically in the animation loop
+  }
+
   private handleGameOver(): void {
     const finalScore = this.score;
     this.gameState = 'gameOver';
     
-    // Deactivate player to stop all physics
     if (this.playerController) {
       this.playerController.deactivate();
     }
     
-    // Trigger callback with final score
     if (this.onGameOver) {
       this.onGameOver(finalScore);
     }
@@ -249,18 +256,15 @@ export class GameManager {
       this.onScoreUpdate(0);
     }
 
-    // Position player at the first path segment
     if (this.playerController && this.pathGenerator && this.player) {
       const firstSegment = this.pathGenerator.getFirstSegment();
       if (firstSegment) {
-        // Place player at center lane of first segment
         this.player.position.set(
           firstSegment.centerX,
           GAME_CONFIG.PLAYER.INITIAL_Y,
           -firstSegment.zStart + GAME_CONFIG.PATH.SEGMENT_LENGTH / 2
         );
         
-        // Set the path curve offset
         this.playerController.setPathCurveOffset(firstSegment.centerX);
       }
     }
@@ -302,6 +306,10 @@ export class GameManager {
       this.pathGenerator = new PathGenerator(this.scene);
       this.pathGenerator.initialize();
     }
+
+    if (this.boostParticleSystem) {
+      this.boostParticleSystem.cleanup();
+    }
   }
 
   getGameState(): GameState {
@@ -312,7 +320,6 @@ export class GameManager {
     return this.score;
   }
 
-
   cleanup(): void {
     if (this.animationFrameId !== null) {
       cancelAnimationFrame(this.animationFrameId);
@@ -320,6 +327,10 @@ export class GameManager {
 
     if (this.pathGenerator) {
       this.pathGenerator.cleanup();
+    }
+
+    if (this.boostParticleSystem) {
+      this.boostParticleSystem.cleanup();
     }
 
     if (this.scene) {

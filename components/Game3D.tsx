@@ -1,6 +1,6 @@
 import { ExpoWebGLRenderingContext, GLView } from 'expo-gl';
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, StyleSheet, TouchableWithoutFeedback, View } from 'react-native';
+import { Animated, Dimensions, PanResponder, PanResponderGestureState, StyleSheet, View } from 'react-native';
 import { GAME_CONFIG } from '../constants/gameConfig';
 import { useCubeContext } from '../contexts/CubeContext';
 import { GameManager } from '../managers/GameManager';
@@ -21,19 +21,23 @@ export default function Game3D() {
   const [menuVisible, setMenuVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
   
-  // USE CUBE CONTEXT instead of local state
   const { selectedCube, setSelectedCube } = useCubeContext();
   
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const tapHintAnim = useRef(new Animated.Value(1)).current;
   
   const gameManagerRef = useRef<GameManager | null>(null);
+  const gameStateRef = useRef<GameState>('landing');
   
-  // Enhanced double-click detection for FAST players
-  const lastTapTimeRef = useRef<number>(0);
-  const tapCountRef = useRef<number>(0);
-  const isWaitingForSecondTapRef = useRef<boolean>(false);
-  const doubleClickTimeoutRef = useRef<number | null>(null);
+  // Double tap detection
+  const lastTapTime = useRef<number>(0);
+  
+  useEffect(() => {
+    gameStateRef.current = gameState;
+  }, [gameState]);
+  
+  const SWIPE_THRESHOLD = 30;
+  const SWIPE_VELOCITY_THRESHOLD = 0.2;
 
   useEffect(() => {
     Animated.timing(fadeAnim, {
@@ -61,14 +65,10 @@ export default function Game3D() {
       if (gameManagerRef.current) {
         gameManagerRef.current.cleanup();
       }
-      if (doubleClickTimeoutRef.current) {
-        clearTimeout(doubleClickTimeoutRef.current);
-      }
     };
   }, []);
 
   const onContextCreate = async (gl: ExpoWebGLRenderingContext) => {
-    console.log('Creating game context with cube:', selectedCube.name);
     const gameManager = new GameManager();
     gameManagerRef.current = gameManager;
     
@@ -77,32 +77,26 @@ export default function Game3D() {
     });
 
     gameManager.setGameOverCallback((finalScore) => {
-      console.log('Game Over with score:', finalScore);
       setFinalScore(finalScore);
       setGameState('gameOver');
     });
     
-    // Pass selected cube type here
     await gameManager.initialize(gl, selectedCube);
-    console.log('Game initialized with cube:', selectedCube.name);
   };
 
   const handleStartGame = async () => {
-    console.log('Starting game');
     if (!gameManagerRef.current) return;
     
     const currentState = gameManagerRef.current.getGameState();
     if (currentState === 'playing') return;
     
     await gameManagerRef.current.startGame(() => {
-      console.log('Game state -> playing');
       setGameState('playing');
       setScore(0);
     });
   };
 
   const handleRestart = () => {
-    console.log('Restarting game');
     if (!gameManagerRef.current) return;
     
     gameManagerRef.current.resetGame();
@@ -112,180 +106,127 @@ export default function Game3D() {
   };
 
   const handleOpenCubeSelector = () => {
-    console.log('handleOpenCubeSelector called!');
     setCubeSelectorVisible(true);
   };
 
   const handleCloseCubeSelector = () => {
-    console.log('handleCloseCubeSelector called!');
     setCubeSelectorVisible(false);
   };
 
   const handleSelectCube = (cube: CubeDefinition) => {
-    console.log('Cube selected:', cube.name);
     setSelectedCube(cube);
     
-    // Update the player cube in the game manager if it exists
     if (gameManagerRef.current) {
       gameManagerRef.current.updatePlayerCube(cube);
     }
   };
 
   const handleToggleSound = () => {
-    // TODO: Implement sound toggle functionality
-    // This should enable/disable game sound effects and music
     setSoundEnabled(!soundEnabled);
-    console.log('Sound toggled:', !soundEnabled);
   };
 
   const handleOpenAccount = () => {
     // TODO: Implement account functionality
-    // This will open account management screen
-    console.log('Account button pressed - Feature coming soon');
   };
 
   const handleOpenInfo = () => {
     // TODO: Implement info modal
-    // This should show game instructions and information
-    console.log('Info button pressed - Feature coming soon');
   };
 
-  // Handle landing screen taps - only if not in button area
-  const handleLandingTap = (event: any) => {
-    const { locationX, locationY } = event.nativeEvent;
-    
-    // Expanded button areas:
-    // Left buttons: x: 0-80, y: 40-220 (column of 3 buttons)
-    // Right button: x: SCREEN_WIDTH-80 to SCREEN_WIDTH, y: 40-120
-    const leftButtonArea = {
-      left: 0,
-      right: 80,
-      top: 40,
-      bottom: 220, // 3 buttons (44px each) + 2 gaps (8px each) = 160px total
-    };
-    
-    const rightButtonArea = {
-      left: SCREEN_WIDTH - 80,
-      right: SCREEN_WIDTH,
-      top: 40,
-      bottom: 120,
-    };
-    
-    // If tap is in button areas, ignore it (let buttons handle it)
-    if (
-      (locationX >= leftButtonArea.left && 
-       locationX <= leftButtonArea.right && 
-       locationY >= leftButtonArea.top && 
-       locationY <= leftButtonArea.bottom) ||
-      (locationX >= rightButtonArea.left && 
-       locationX <= rightButtonArea.right && 
-       locationY >= rightButtonArea.top && 
-       locationY <= rightButtonArea.bottom)
-    ) {
-      console.log('Tap in button area - ignoring');
-      return;
-    }
-    
-    // Otherwise, start game
-    handleStartGame();
-  };
-
-  // Handle screen taps based on position
-  const handleScreenTap = (event: any) => {
-    if (gameState !== 'playing' || !gameManagerRef.current) return;
-
-    const { locationX, locationY } = event.nativeEvent;
-    
-    // Ignore taps in quit button area (top-left corner)
-    if (locationX < 100 && locationY < 120) {
-      console.log('Tap in quit button area - ignoring');
-      return;
-    }
-
-    const screenThird = SCREEN_WIDTH / 3;
-
-    if (locationX < screenThird) {
-      // Left third - move left
-      gameManagerRef.current.handleClickLeft();
-      console.log('Left tap');
-    } else if (locationX > screenThird * 2) {
-      // Right third - move right
-      gameManagerRef.current.handleClickRight();
-      console.log('Right tap');
-    } else {
-      // Center third - handle double tap for jump
-      handleCenterDoubleClick();
-    }
-  };
-
-  // SUPER FAST double-click detection - optimized for rapid tapping
-  const handleCenterDoubleClick = () => {
-    if (gameState !== 'playing' || !gameManagerRef.current) return;
-
-    const now = Date.now();
-    const timeSinceLastTap = now - lastTapTimeRef.current;
-    
-    if (tapCountRef.current === 0) {
-      tapCountRef.current = 1;
-      lastTapTimeRef.current = now;
-      isWaitingForSecondTapRef.current = true;
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
       
-      if (doubleClickTimeoutRef.current) {
-        clearTimeout(doubleClickTimeoutRef.current);
-      }
+      onPanResponderGrant: () => {},
       
-      doubleClickTimeoutRef.current = setTimeout(() => {
-        tapCountRef.current = 0;
-        isWaitingForSecondTapRef.current = false;
-      }, 350);
-      
-    } else if (tapCountRef.current === 1 && isWaitingForSecondTapRef.current) {
-      console.log(`INSTANT JUMP! (${timeSinceLastTap}ms between taps)`);
-      gameManagerRef.current.handleDoubleClick();
-      
-      tapCountRef.current = 0;
-      lastTapTimeRef.current = 0;
-      isWaitingForSecondTapRef.current = false;
-      
-      if (doubleClickTimeoutRef.current) {
-        clearTimeout(doubleClickTimeoutRef.current);
-        doubleClickTimeoutRef.current = null;
-      }
-    }
-  };
+      onPanResponderRelease: (evt, gestureState: PanResponderGestureState) => {
+        const currentGameState = gameStateRef.current;
+        const { dx, dy, vx, vy, x0, y0 } = gestureState;
+
+        if (currentGameState === 'landing') {
+          if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+            return;
+          }
+
+          const leftButtonArea = { left: 0, right: 80, top: 40, bottom: 220 };
+          const rightButtonArea = { left: SCREEN_WIDTH - 80, right: SCREEN_WIDTH, top: 40, bottom: 120 };
+
+          if (
+            (x0 >= leftButtonArea.left && x0 <= leftButtonArea.right && y0 >= leftButtonArea.top && y0 <= leftButtonArea.bottom) ||
+            (x0 >= rightButtonArea.left && x0 <= rightButtonArea.right && y0 >= rightButtonArea.top && y0 <= rightButtonArea.bottom)
+          ) {
+            return;
+          }
+
+          handleStartGame();
+          return;
+        }
+
+        if (currentGameState === 'playing' && gameManagerRef.current) {
+          if (x0 < 100 && y0 < 120) {
+            return;
+          }
+
+          const absX = Math.abs(dx);
+          const absY = Math.abs(dy);
+          const absVx = Math.abs(vx);
+          const absVy = Math.abs(vy);
+
+          // Check for double tap (minimal movement)
+          if (absX < 10 && absY < 10) {
+            const now = Date.now();
+            const timeSinceLastTap = now - lastTapTime.current;
+            
+            if (timeSinceLastTap < GAME_CONFIG.GAMEPLAY.DOUBLE_TAP_THRESHOLD) {
+              // Double tap detected!
+              gameManagerRef.current.handleDoubleTap();
+              lastTapTime.current = 0;
+            } else {
+              // Single tap - record time
+              lastTapTime.current = now;
+            }
+            return;
+          }
+
+          // Handle swipe gestures
+          if (dy < -SWIPE_THRESHOLD && absY > absX && absVy > SWIPE_VELOCITY_THRESHOLD) {
+            // Swipe UP - Jump
+            gameManagerRef.current.handleSwipeUp();
+          }
+          else if (dy > SWIPE_THRESHOLD && absY > absX && absVy > SWIPE_VELOCITY_THRESHOLD) {
+            // NEW: Swipe DOWN - Fast fall / Cancel jump
+            gameManagerRef.current.handleSwipeDown();
+          }
+          else if (dx < -SWIPE_THRESHOLD && absX > absY && absVx > SWIPE_VELOCITY_THRESHOLD) {
+            // Swipe LEFT
+            gameManagerRef.current.handleSwipeLeft();
+          }
+          else if (dx > SWIPE_THRESHOLD && absX > absY && absVx > SWIPE_VELOCITY_THRESHOLD) {
+            // Swipe RIGHT
+            gameManagerRef.current.handleSwipeRight();
+          }
+        }
+      },
+
+      onPanResponderTerminate: () => {},
+    })
+  ).current;
 
   return (
     <View style={styles.container}>
-      {/* Layer 1: 3D Scene */}
-      <GLView 
-        style={styles.glView} 
-        onContextCreate={onContextCreate}
-      />
-      
-      {/* Layer 2: Invisible tap zones (BOTTOM LAYER - behind everything) */}
-      {gameState === 'landing' && (
-        <TouchableWithoutFeedback onPress={handleLandingTap}>
-          <View style={styles.tapZone} />
-        </TouchableWithoutFeedback>
-      )}
+      <GLView style={styles.glView} onContextCreate={onContextCreate} />
 
-      {gameState === 'playing' && (
-        <TouchableWithoutFeedback onPress={handleScreenTap}>
-          <View style={styles.tapZone} />
-        </TouchableWithoutFeedback>
-      )}
-      
-      {/* Layer 3: UI Overlays (TOP LAYER - buttons always clickable) */}
-      <Animated.View style={[styles.overlay, { opacity: fadeAnim }]} pointerEvents="box-none">
+      <Animated.View
+        style={[styles.overlay, { opacity: fadeAnim }]}
+        pointerEvents="box-none"
+      >
         {gameState === 'landing' && (
-          <LandingOverlay 
+          <LandingOverlay
             tapHintOpacity={tapHintAnim}
             selectedCube={selectedCube}
             onOpenCubeSelector={handleOpenCubeSelector}
-            onOpenMenu={() => {
-              console.log('Opening menu');
-              setMenuVisible(true);
-            }}
+            onOpenMenu={() => setMenuVisible(true)}
             soundEnabled={soundEnabled}
             onToggleSound={handleToggleSound}
             onOpenAccount={handleOpenAccount}
@@ -302,8 +243,17 @@ export default function Game3D() {
         )}
       </Animated.View>
 
-      {/* Layer 4: Modals (HIGHEST LAYER - ALWAYS RENDERED, visibility controlled by Modal component) */}
-      <View style={styles.modalLayer} pointerEvents={cubeSelectorVisible ? 'auto' : 'none'}>
+      {(gameState === 'landing' || gameState === 'playing') && (
+        <View 
+          style={styles.gestureOverlay} 
+          {...panResponder.panHandlers}
+        />
+      )}
+
+      <View
+        style={styles.modalLayer}
+        pointerEvents={cubeSelectorVisible ? 'auto' : 'none'}
+      >
         <CubeSelector
           visible={cubeSelectorVisible}
           selectedCube={selectedCube}
@@ -323,12 +273,13 @@ const styles = StyleSheet.create({
   glView: {
     ...StyleSheet.absoluteFillObject,
   },
-  tapZone: {
-    ...StyleSheet.absoluteFillObject,
-  },
   overlay: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 10,
+  },
+  gestureOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 15,
   },
   modalLayer: {
     ...StyleSheet.absoluteFillObject,

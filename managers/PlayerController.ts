@@ -2,36 +2,38 @@ import * as THREE from 'three';
 import { GAME_CONFIG } from '../constants/gameConfig';
 
 export class PlayerController {
-  private player: THREE.Mesh;
+   private player: THREE.Mesh;
   private isDropping: boolean = false;
   private isFalling: boolean = false;
   private isGrounded: boolean = true;
   private isActive: boolean = false;
   private velocityY: number = 0;
-  private currentLane: number = 1; // 0=left, 1=center, 2=right
+  private currentLane: number = 1;
   private targetLane: number = 1;
   private currentPathY: number = -1;
   
-  // Enhanced sliding physics - smooth gliding motion
-  private laneChangeProgress: number = 0; // 0-1 for smooth lane transitions
+  private laneChangeProgress: number = 0;
   private isChangingLane: boolean = false;
   private startLaneX: number = 0;
   private targetLaneX: number = 0;
   
-  // Jump rotation
   private isJumping: boolean = false;
+  private isFastFalling: boolean = false; // NEW: Fast fall state
   private startRotationX: number = 0;
   private jumpStartTime: number = 0;
   private jumpDuration: number = 0;
+  private jumpVelocity: number = 0;
   
-  // Collision tracking
   private timeOffPath: number = 0;
   private hasCommittedToFall: boolean = false;
   
-  // PERFORMANCE FIX: Lock Y position when grounded
   private lockedGroundY: number = 0;
   
-  // Constants
+  // BOOST STATE
+  private boostActive: boolean = false;
+  private boostStartTime: number = 0;
+  private boostProgress: number = 0;
+  
   private readonly FALL_GRACE_PERIOD = 150;
   private readonly LANE_SWITCH_SMOOTHNESS = 0.18;
   
@@ -41,7 +43,6 @@ export class PlayerController {
 
   updatePlayerReference(newPlayer: THREE.Mesh): void {
     this.player = newPlayer;
-    console.log('PlayerController: Player reference updated');
   }
 
   dropOntoPath(): Promise<void> {
@@ -61,7 +62,6 @@ export class PlayerController {
         const elapsed = Date.now() - startTime;
         const progress = Math.min(elapsed / duration, 1);
 
-        // Smooth drop with ease-out cubic
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         this.player.position.y = startY + (endY - startY) * easeProgress;
 
@@ -70,9 +70,8 @@ export class PlayerController {
         } else {
           this.isDropping = false;
           this.isGrounded = true;
-          this.lockedGroundY = endY; // LOCK the ground position
-          this.player.position.y = this.lockedGroundY; // Set exact position
-          // Reset to clean state - no rotation
+          this.lockedGroundY = endY;
+          this.player.position.y = this.lockedGroundY;
           this.player.rotation.set(0, 0, 0);
           resolve();
         }
@@ -94,34 +93,33 @@ export class PlayerController {
     this.isChangingLane = false;
     this.isJumping = false;
     this.jumpStartTime = 0;
-    // Lock ground position
+    this.jumpVelocity = 0;
+    this.boostActive = false;
+    this.boostStartTime = 0;
+    this.boostProgress = 0;
     this.lockedGroundY = this.currentPathY + 0.4 + GAME_CONFIG.PLAYER.GROUND_OFFSET;
-    // Clean slate - no rotation
     this.player.rotation.set(0, 0, 0);
-    console.log('Player activated, lane:', this.currentLane);
   }
 
   deactivate(): void {
     this.isActive = false;
   }
 
-  handleClickLeft(): void {
+  handleSwipeLeft(): void {
     if (!this.isActive || this.hasCommittedToFall) return;
     
     if (this.targetLane > 0) {
       this.targetLane--;
       this.startLaneTransition();
-      console.log('Moving LEFT to lane:', this.targetLane);
     }
   }
 
-  handleClickRight(): void {
+  handleSwipeRight(): void {
     if (!this.isActive || this.hasCommittedToFall) return;
     
     if (this.targetLane < 2) {
       this.targetLane++;
       this.startLaneTransition();
-      console.log('Moving RIGHT to lane:', this.targetLane);
     }
   }
 
@@ -134,20 +132,70 @@ export class PlayerController {
   }
 
   handleJump(): void {
-    if (!this.isActive || this.hasCommittedToFall || this.isJumping) return;
+    // Allow jumping anytime when grounded
+    if (!this.isActive || this.hasCommittedToFall) return;
+    if (!this.isGrounded) return;
     
-    console.log('JUMPING! Starting front flip animation');
+    // Clean jump with proper velocity
     this.velocityY = GAME_CONFIG.PLAYER.JUMP_FORCE;
+    this.jumpVelocity = GAME_CONFIG.PLAYER.JUMP_FORCE;
     this.isGrounded = false;
     this.isJumping = true;
     this.jumpStartTime = Date.now();
     this.startRotationX = this.player.rotation.x;
     
-    // Calculate jump duration based on gravity and jump force
-    // Time to go up and come down: t = 2 * v / g
-    this.jumpDuration = (2 * GAME_CONFIG.PLAYER.JUMP_FORCE / GAME_CONFIG.PLAYER.GRAVITY) * 16.67; // Convert to milliseconds
+    // Calculate jump duration
+    this.jumpDuration = (2 * GAME_CONFIG.PLAYER.JUMP_FORCE / GAME_CONFIG.PLAYER.GRAVITY) * 16.67;
+  }
+
+  // NEW: Handle boost activation
+  activateBoost(): boolean {
+    if (!this.isActive || this.hasCommittedToFall || this.boostActive) return false;
     
-    console.log('Jump duration:', this.jumpDuration, 'ms');
+    this.boostActive = true;
+    this.boostStartTime = Date.now();
+    this.boostProgress = 0;
+    
+    return true; // Return true to trigger particle spawn
+  }
+
+  // NEW: Check if currently boosting
+  isBoostActive(): boolean {
+    return this.boostActive;
+  }
+
+  // NEW: Get current speed multiplier based on cubic bezier curve
+  public getBoostSpeedMultiplier(): number {
+    if (!this.boostActive) return 1.0;
+
+    const elapsed = Date.now() - this.boostStartTime;
+    const duration = GAME_CONFIG.PLAYER.BOOST_DURATION;
+    
+    if (elapsed >= duration) {
+      this.boostActive = false;
+      this.boostProgress = 0;
+      return 1.0;
+    }
+
+    // Cubic Bezier curve: ease-in-out-back
+    const t = elapsed / duration;
+    
+    // Custom cubic bezier that matches your graph
+    let speedMultiplier: number;
+    
+    if (t < 0.5) {
+      // Acceleration phase - cubic ease in
+      const accelT = t * 2;
+      speedMultiplier = 1.0 + (GAME_CONFIG.PLAYER.BOOST_SPEED_MULTIPLIER - 1.0) * (accelT * accelT * accelT);
+    } else {
+      // Deceleration phase - cubic ease out
+      const decelT = (t - 0.5) * 2;
+      const remaining = 1.0 - decelT;
+      speedMultiplier = 1.0 + (GAME_CONFIG.PLAYER.BOOST_SPEED_MULTIPLIER - 1.0) * (remaining * remaining * remaining);
+    }
+
+    this.boostProgress = t;
+    return speedMultiplier;
   }
 
   setPathCurveOffset(offset: number): void {
@@ -158,8 +206,9 @@ export class PlayerController {
     if (!this.isActive) return;
 
     if (this.isChangingLane) {
-      // Smooth eased lane transition
-      this.laneChangeProgress += this.LANE_SWITCH_SMOOTHNESS;
+      // ENHANCED: Faster lane switching during boost for better responsiveness
+      const switchSpeed = this.boostActive ? this.LANE_SWITCH_SMOOTHNESS * 1.3 : this.LANE_SWITCH_SMOOTHNESS;
+      this.laneChangeProgress += switchSpeed;
       
       if (this.laneChangeProgress >= 1) {
         this.laneChangeProgress = 1;
@@ -167,7 +216,6 @@ export class PlayerController {
         this.currentLane = this.targetLane;
       }
       
-      // Smooth ease-in-out interpolation
       const ease = this.laneChangeProgress < 0.5
         ? 2 * this.laneChangeProgress * this.laneChangeProgress
         : 1 - Math.pow(-2 * this.laneChangeProgress + 2, 2) / 2;
@@ -179,51 +227,55 @@ export class PlayerController {
   updateForward(): void {
     if (!this.isActive || this.hasCommittedToFall) return;
     
-    const moveDistance = GAME_CONFIG.PLAYER.FORWARD_SPEED;
+    // Apply boost multiplier to forward speed
+    const speedMultiplier = this.getBoostSpeedMultiplier();
+    const moveDistance = GAME_CONFIG.PLAYER.FORWARD_SPEED * speedMultiplier;
     this.player.position.z -= moveDistance;
   }
 
   updateRotation(): void {
     if (!this.isActive) return;
 
-    // Handle front flip during jump
-    if (this.isJumping) {
+    if (this.isFastFalling) {
+      // Fast fall animation - nose dive
+      const targetRotation = Math.PI * 0.5; // 90 degrees forward tilt
+      this.player.rotation.x += (targetRotation - this.player.rotation.x) * 0.15;
+      this.player.rotation.y = 0;
+      this.player.rotation.z *= 0.9;
+    }
+    else if (this.isJumping) {
+      // Smooth rotation during jump
       const elapsed = Date.now() - this.jumpStartTime;
       const progress = Math.min(elapsed / this.jumpDuration, 1);
       
-      // Perform one complete forward rotation (360 degrees = 2π radians)
-      this.player.rotation.x = this.startRotationX + (Math.PI * 2 * progress);
-      this.player.rotation.x = -this.player.rotation.x; // Forward flip
+      // Smooth sine wave rotation
+      const rotationProgress = Math.sin(progress * Math.PI);
+      this.player.rotation.x = -rotationProgress * Math.PI * 2;
       
-      // If we've landed and completed the rotation
+      // Reset rotation when landing
       if (this.isGrounded && progress >= 0.5) {
-        console.log('Front flip completed on landing');
         this.isJumping = false;
-        // Snap to exact rotation to avoid drift
-        this.player.rotation.x = 0;
-        this.player.rotation.y = 0;
-        this.player.rotation.z = 0;
+        this.player.rotation.set(0, 0, 0);
       }
     } else if (this.isGrounded && !this.hasCommittedToFall) {
-      // PERFORMANCE FIX: Keep rotation locked at zero for stability
+      // Ground state - reset X and Y
       this.player.rotation.x = 0;
       this.player.rotation.y = 0;
       
-      // Slight tilt in direction of lane change (like pushing a box)
       if (this.isChangingLane) {
+        // Smooth tilt during lane change
         const tiltDirection = this.targetLane > this.currentLane ? 1 : -1;
-        const tiltAmount = this.laneChangeProgress * 0.08;
+        const tiltAmount = 0.15;
         this.player.rotation.z = tiltDirection * tiltAmount * Math.sin(this.laneChangeProgress * Math.PI);
       } else {
-        // Smoothly return to neutral position
-        this.player.rotation.z *= 0.85;
+        // Smooth Z rotation reset
+        this.player.rotation.z *= 0.80;
         if (Math.abs(this.player.rotation.z) < 0.001) {
-          this.player.rotation.z = 0; // Snap to zero
+          this.player.rotation.z = 0;
         }
       }
-      
     } else if (this.hasCommittedToFall) {
-      // Realistic tumbling when falling
+      // Tumbling animation
       this.player.rotation.x += 0.15;
       this.player.rotation.y += 0.08;
       this.player.rotation.z += 0.12;
@@ -235,7 +287,6 @@ export class PlayerController {
 
     this.currentPathY = collisionCheck.pathY;
 
-    // Once falling is committed, keep falling until dead
     if (this.hasCommittedToFall) {
       this.velocityY -= GAME_CONFIG.PLAYER.GRAVITY * 1.8;
       this.player.position.y += this.velocityY;
@@ -249,57 +300,56 @@ export class PlayerController {
 
     const groundY = this.currentPathY + 0.4 + GAME_CONFIG.PLAYER.GROUND_OFFSET;
 
-    // Track time off path
     if (!collisionCheck.onPath) {
       this.timeOffPath += 16.67;
     } else {
       this.timeOffPath = 0;
-      // Update locked ground Y when on path
       this.lockedGroundY = groundY;
     }
 
-    // Handle jumping/falling physics
+    // Physics
     if (!this.isGrounded) {
-      // Apply gravity
-      this.velocityY -= GAME_CONFIG.PLAYER.GRAVITY;
+      // Apply gravity (stronger during fast fall)
+      const gravityMultiplier = this.isFastFalling ? 1.5 : 1.0;
+      this.velocityY -= GAME_CONFIG.PLAYER.GRAVITY * gravityMultiplier;
       this.player.position.y += this.velocityY;
 
       // Check for landing
       if (this.player.position.y <= groundY) {
         if (collisionCheck.onPath) {
-          // Successful landing - LOCK position exactly
+          // Successful landing
           this.player.position.y = groundY;
           this.lockedGroundY = groundY;
           this.isGrounded = true;
           this.velocityY = 0;
+          this.jumpVelocity = 0;
           this.isFalling = false;
           
-          // Front flip will complete in updateRotation based on landing
+          // Reset fast fall state
+          if (this.isFastFalling) {
+            this.isFastFalling = false;
+            this.player.rotation.x = 0; // Reset rotation immediately
+          }
         } else {
-          // Fell through - check grace period
           if (this.timeOffPath > this.FALL_GRACE_PERIOD) {
-            console.log('COMMITTED TO FALL - time off path:', this.timeOffPath);
             this.hasCommittedToFall = true;
             this.isFalling = true;
+            this.isFastFalling = false;
             return 'falling';
           }
         }
       }
     } else {
-      // PERFORMANCE FIX: Lock Y position when grounded - NO ADJUSTMENTS
       this.player.position.y = this.lockedGroundY;
       
       if (!collisionCheck.onPath) {
-        // Just stepped off platform
         if (this.timeOffPath > this.FALL_GRACE_PERIOD) {
-          console.log('STEPPED OFF - COMMITTING TO FALL');
           this.hasCommittedToFall = true;
           this.isGrounded = false;
           this.isFalling = true;
           this.velocityY = 0;
           return 'falling';
         } else {
-          // In grace period - slight drop but can recover
           this.isGrounded = false;
           this.velocityY = -0.05;
         }
@@ -329,11 +379,36 @@ export class PlayerController {
     return this.currentLane;
   }
 
+  getBoostProgress(): number {
+    if (!this.boostActive) return 0;
+    return this.boostProgress;
+  }
+
+  isCurrentlyBoosting(): boolean {
+    return this.boostActive;
+  }
+
+  handleFastFall(): void {
+    // Only allow fast fall when in the air (not grounded)
+    if (!this.isActive || this.hasCommittedToFall || this.isGrounded) return;
+    
+    // Cancel jump animation
+    this.isJumping = false;
+    
+    // Apply strong downward force
+    this.velocityY = -GAME_CONFIG.PLAYER.FAST_FALL_SPEED;
+    
+    // Add fast fall flag for visual feedback
+    this.isFastFalling = true;
+  }
+  
+
   reset(): void {
     this.player.position.set(0, GAME_CONFIG.PLAYER.INITIAL_Y, 0);
     this.player.rotation.set(0, 0, 0);
     this.isDropping = false;
     this.isFalling = false;
+    this.isFastFalling = false; // NEW: Reset fast fall
     this.isGrounded = true;
     this.isActive = false;
     this.velocityY = 0;
@@ -346,6 +421,10 @@ export class PlayerController {
     this.hasCommittedToFall = false;
     this.isJumping = false;
     this.jumpStartTime = 0;
+    this.jumpVelocity = 0;
     this.lockedGroundY = 0;
+    this.boostActive = false;
+    this.boostStartTime = 0;
+    this.boostProgress = 0;
   }
 }

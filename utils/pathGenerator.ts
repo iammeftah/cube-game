@@ -7,6 +7,7 @@ interface TileData {
   zPosition: number;
   spawnTime: number;
   isAnimating: boolean;
+  isAccent: boolean;
 }
 
 export class PathGenerator {
@@ -14,103 +15,169 @@ export class PathGenerator {
   private scene: THREE.Scene;
   private furthestZ: number = 0;
   
-  // PERFORMANCE FIX: Cache tile Y position - MUST be consistent
   private readonly TILE_Y_POSITION = -1;
   
-  // CONTINUOUS PATH: Track last generated lane for logical continuation
+  // Organic generation tracking
   private lastGeneratedLanes: boolean[] = [true, true, true];
-  private consecutiveStraightRows: number = 0;
+  private consecutiveSameConfig: number = 0;
+  private recentConfigurations: boolean[][] = [];
+  private distanceTraveled: number = 0;
   
-  // Pattern queue for smooth continuous generation
-  private patternQueue: boolean[][] = [];
-  private currentPatternIndex: number = 0;
-  
-  // Animation constants - faster for continuous feel
-  private readonly SPAWN_DURATION = 300; // Faster spawn (was 400)
-  private readonly SPAWN_HEIGHT = 6; // Lower drop height for faster animation
-  private readonly SPAWN_INTERVAL = 2.0; // Distance between tile rows
+  private readonly SPAWN_DURATION = 300;
+  private readonly SPAWN_HEIGHT = 6;
+  private readonly SPAWN_INTERVAL = 2.0;
 
   constructor(scene: THREE.Scene) {
     this.scene = scene;
   }
 
   initialize(): void {
-    console.log('PathGenerator: Initializing THE UNSTABLE PATH - Continuous Flow');
+    console.log('PathGenerator: Initializing organic path generation');
     this.generateInitialPath();
-    console.log('PathGenerator: Path ready - Run to create your way!');
+    console.log('PathGenerator: Path ready');
   }
 
   private generateInitialPath(): void {
     let z = 0;
-    // Start with a safe runway - all lanes open
+    // Start with a safe runway
     for (let i = 0; i < 5; i++) {
-      this.createTileRow(z, [true, true, true], false); // No animation for initial tiles
+      this.createTileRow(z, [true, true, true], false);
       z += this.SPAWN_INTERVAL;
     }
     
     this.furthestZ = z;
     
-    // Pre-generate pattern queue for continuous spawning
-    this.fillPatternQueue();
-    
     // Generate initial visible path
     while (this.furthestZ < 30) {
-      this.generateNextRowContinuous();
+      this.generateNextRowOrganic();
     }
   }
 
-  private fillPatternQueue(): void {
-    // Generate a sequence of logical patterns and flatten into row queue
-    const pattern = this.selectNextLogicalPattern();
+  private generateNextRowOrganic(): void {
+    const currentActive = this.lastGeneratedLanes.filter(l => l).length;
+    const difficulty = Math.min(this.distanceTraveled / 100, 1);
     
-    if (pattern.type === 'zigzag' || pattern.type === 'stairs') {
-      // Multi-sequence pattern
-      for (const lanes of pattern.sequence) {
-        this.patternQueue.push(lanes);
-      }
+    const isRepeating = this.consecutiveSameConfig > 3;
+    
+    let newLanes: boolean[];
+    
+    if (isRepeating) {
+      newLanes = this.generateDifferentConfiguration();
+    } else if (currentActive === 1) {
+      newLanes = this.generateExpansion();
     } else {
-      // Single lane pattern repeated
-      for (let i = 0; i < pattern.rows; i++) {
-        this.patternQueue.push(pattern.lanes);
-      }
-    }
-  }
-
-  private generateNextRowContinuous(): void {
-    // CONTINUOUS SPAWNING: Generate one row at a time from pattern queue
-    
-    // If queue is running low, refill it
-    if (this.patternQueue.length < 3) {
-      this.fillPatternQueue();
+      newLanes = this.generateAdaptive(difficulty);
     }
     
-    // Get next row from queue
-    const lanes = this.patternQueue.shift() || [true, true, true];
-    
-    // Create the row with staggered animation timing for wave effect
-    this.createTileRowWithStagger(this.furthestZ, lanes);
-    
+    this.createTileRowWithStagger(this.furthestZ, newLanes);
+    this.updateHistory(newLanes);
     this.furthestZ += this.SPAWN_INTERVAL;
-    this.lastGeneratedLanes = lanes;
+    this.distanceTraveled += this.SPAWN_INTERVAL;
+  }
+
+  private generateAdaptive(difficulty: number): boolean[] {
+    const recentOpen = this.countRecentOpenLanes();
     
-    // Track straight rows
-    if (lanes.every((lane, i) => lane === this.lastGeneratedLanes[i])) {
-      this.consecutiveStraightRows++;
-    } else {
-      this.consecutiveStraightRows = 0;
+    let probabilities = [0.7, 0.75, 0.7];
+    
+    probabilities = probabilities.map(p => p - (difficulty * 0.25));
+    
+    if (recentOpen > 7) {
+      probabilities = probabilities.map(p => p - 0.15);
     }
+    
+    if (recentOpen < 4) {
+      probabilities = probabilities.map(p => p + 0.2);
+    }
+    
+    let lanes = probabilities.map(p => Math.random() < p);
+    
+    if (!lanes.some(l => l)) {
+      const randomLane = Math.floor(Math.random() * 3);
+      lanes[randomLane] = true;
+    }
+    
+    if (Math.random() < 0.15) {
+      lanes = this.getInterestingConfig();
+    }
+    
+    return lanes;
+  }
+
+  private generateExpansion(): boolean[] {
+    const activeLane = this.lastGeneratedLanes.findIndex(l => l);
+    
+    if (activeLane === 0) {
+      return Math.random() < 0.5 ? [true, true, false] : [true, false, false];
+    } else if (activeLane === 2) {
+      return Math.random() < 0.5 ? [false, true, true] : [false, false, true];
+    } else {
+      const r = Math.random();
+      if (r < 0.33) return [true, true, false];
+      if (r < 0.66) return [false, true, true];
+      return [false, true, false];
+    }
+  }
+
+  private generateDifferentConfiguration(): boolean[] {
+    const configs = [
+      [true, true, true],
+      [true, true, false],
+      [false, true, true],
+      [true, false, true],
+      [true, false, false],
+      [false, false, true],
+      [false, true, false],
+    ];
+    
+    const lastConfigStr = this.lastGeneratedLanes.join(',');
+    const available = configs.filter(c => c.join(',') !== lastConfigStr);
+    
+    return available[Math.floor(Math.random() * available.length)];
+  }
+
+  private getInterestingConfig(): boolean[] {
+    const interesting = [
+      [true, false, true],
+      [false, true, false],
+      [true, false, false],
+      [false, false, true],
+    ];
+    
+    return interesting[Math.floor(Math.random() * interesting.length)];
+  }
+
+  private countRecentOpenLanes(): number {
+    return this.recentConfigurations.flat().filter(l => l).length;
+  }
+
+  private updateHistory(newLanes: boolean[]): void {
+    const isSame = this.lastGeneratedLanes.every((l, i) => l === newLanes[i]);
+    
+    if (isSame) {
+      this.consecutiveSameConfig++;
+    } else {
+      this.consecutiveSameConfig = 0;
+    }
+    
+    this.recentConfigurations.push([...newLanes]);
+    if (this.recentConfigurations.length > 5) {
+      this.recentConfigurations.shift();
+    }
+    
+    this.lastGeneratedLanes = newLanes;
   }
 
   private createTileRowWithStagger(zPosition: number, lanes: boolean[]): void {
     const lanePositions = [-2.5, 0, 2.5];
     const tileSize = 2.0;
     const tileHeight = 0.6;
-    
-    // STAGGER EFFECT: Tiles in same row spawn with slight delay
-    const staggerDelay = 30; // ms between lane spawns
+    const staggerDelay = 30;
     
     lanes.forEach((hasTile, laneIndex) => {
       if (hasTile) {
+        const isAccent = Math.random() < 0.1;
+        
         setTimeout(() => {
           this.createTile(
             lanePositions[laneIndex], 
@@ -118,102 +185,12 @@ export class PathGenerator {
             laneIndex, 
             tileSize, 
             tileHeight, 
-            true
+            true,
+            isAccent
           );
         }, laneIndex * staggerDelay);
       }
     });
-  }
-
-  private selectNextLogicalPattern(): any {
-    // REALISTIC PATH LOGIC: Make decisions based on previous state
-    const currentLanes = [...this.lastGeneratedLanes];
-    const activeLaneCount = currentLanes.filter(lane => lane).length;
-    
-    // Calculate probabilities based on game state
-    if (this.consecutiveStraightRows > 6) {
-      // Been straight too long - force a challenge
-      this.consecutiveStraightRows = 0;
-      return this.generateChallengePattern(currentLanes);
-    } else if (activeLaneCount === 1) {
-      // Only one lane active - must expand or continue
-      return this.generateExpansionPattern(currentLanes);
-    } else if (activeLaneCount === 2) {
-      // Two lanes - can do various moves
-      return this.generateBalancedPattern(currentLanes);
-    } else {
-      // All three lanes - can do anything
-      return this.generateOpenPattern();
-    }
-  }
-
-  private generateOpenPattern(): any {
-    const options = [
-      { type: 'straight', rows: 4, lanes: [true, true, true], sequence: [] },
-      { type: 'straight', rows: 3, lanes: [true, true, true], sequence: [] },
-      { type: 'choice', rows: 3, lanes: [true, false, true], sequence: [] },
-      { type: 'narrow', rows: 2, lanes: [false, true, false], sequence: [] },
-      { type: 'side', rows: 3, lanes: [true, true, false], sequence: [] },
-      { type: 'side', rows: 3, lanes: [false, true, true], sequence: [] },
-    ];
-    
-    return options[Math.floor(Math.random() * options.length)];
-  }
-
-  private generateBalancedPattern(currentLanes: boolean[]): any {
-    const activeLanes = currentLanes.map((active, i) => active ? i : -1).filter(i => i >= 0);
-    
-    const options = [
-      { type: 'straight', rows: 3, lanes: currentLanes, sequence: [] },
-      { type: 'choice', rows: 2, lanes: [true, false, true], sequence: [] },
-    ];
-    
-    if (activeLanes.length === 2) {
-      if (!currentLanes[0]) options.push({ type: 'side', rows: 2, lanes: [true, true, false], sequence: [] });
-      if (!currentLanes[2]) options.push({ type: 'side', rows: 2, lanes: [false, true, true], sequence: [] });
-      if (!currentLanes[1]) options.push({ type: 'choice', rows: 2, lanes: [true, true, true], sequence: [] });
-    }
-    
-    return options[Math.floor(Math.random() * options.length)];
-  }
-
-  private generateExpansionPattern(currentLanes: boolean[]): any {
-    const activeLane = currentLanes.findIndex(lane => lane);
-    
-    if (activeLane === 0) {
-      return { type: 'stairs', rows: 1, lanes: [], sequence: [
-        [true, false, false],
-        [true, true, false],
-        [false, true, false],
-      ]};
-    } else if (activeLane === 2) {
-      return { type: 'stairs', rows: 1, lanes: [], sequence: [
-        [false, false, true],
-        [false, true, true],
-        [false, true, false],
-      ]};
-    } else {
-      return { type: 'straight', rows: 2, lanes: [false, true, false], sequence: [] };
-    }
-  }
-
-  private generateChallengePattern(currentLanes: boolean[]): any {
-    const challenges = [
-      { type: 'zigzag', rows: 1, lanes: [], sequence: [
-        [true, false, false],
-        [false, true, false],
-        [false, false, true],
-        [false, true, false],
-      ]},
-      { type: 'stairs', rows: 1, lanes: [], sequence: [
-        [true, true, false],
-        [false, true, true],
-        [false, false, true],
-      ]},
-      { type: 'narrow', rows: 3, lanes: [false, true, false], sequence: [] },
-    ];
-    
-    return challenges[Math.floor(Math.random() * challenges.length)];
   }
 
   private createTileRow(zPosition: number, lanes: boolean[], animate: boolean = true): void {
@@ -223,42 +200,51 @@ export class PathGenerator {
     
     lanes.forEach((hasTile, laneIndex) => {
       if (hasTile) {
-        this.createTile(lanePositions[laneIndex], zPosition, laneIndex, tileSize, tileHeight, animate);
+        this.createTile(lanePositions[laneIndex], zPosition, laneIndex, tileSize, tileHeight, animate, false);
       }
     });
   }
 
-  private createTile(xPos: number, zPos: number, lane: number, size: number, height: number, animate: boolean): void {
-    const color = GAME_CONFIG.PATH.TILE_COLOR;
-    const emissive = GAME_CONFIG.PATH.TILE_EMISSIVE;
-    const emissiveIntensity = GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY;
+  private createTile(
+    xPos: number, 
+    zPos: number, 
+    lane: number, 
+    size: number, 
+    height: number, 
+    animate: boolean, 
+    isAccent: boolean = false
+  ): void {
+    const color = isAccent ? 0xcc0000 : GAME_CONFIG.PATH.TILE_COLOR;
+    const emissive = isAccent ? 0x440000 : GAME_CONFIG.PATH.TILE_EMISSIVE;
+    const emissiveIntensity = isAccent ? 0.3 : GAME_CONFIG.PATH.TILE_EMISSIVE_INTENSITY;
     
     const geometry = new THREE.BoxGeometry(size, height, size);
     const material = new THREE.MeshStandardMaterial({
       color: color,
       emissive: emissive,
       emissiveIntensity: emissiveIntensity,
-      metalness: 0.3,
-      roughness: 0.7,
+      metalness: isAccent ? 0.4 : 0.3,
+      roughness: isAccent ? 0.6 : 0.7,
       transparent: animate,
       opacity: animate ? 0 : 1,
     });
     
     const mesh = new THREE.Mesh(geometry, material);
     
-    // Start position - either at spawn height or final position
     if (animate) {
       mesh.position.set(xPos, this.TILE_Y_POSITION + this.SPAWN_HEIGHT, -zPos);
     } else {
       mesh.position.set(xPos, this.TILE_Y_POSITION, -zPos);
     }
     
-    // Subtle edges
+    const edgeColor = isAccent ? 0xff4444 : GAME_CONFIG.PATH.EDGE_COLOR;
+    const edgeOpacity = isAccent ? 0.7 : 0.4;
+    
     const edges = new THREE.EdgesGeometry(geometry);
     const lineMaterial = new THREE.LineBasicMaterial({ 
-      color: GAME_CONFIG.PATH.EDGE_COLOR,
+      color: edgeColor,
       transparent: true,
-      opacity: animate ? 0 : 0.4,
+      opacity: animate ? 0 : edgeOpacity,
     });
     const lineSegments = new THREE.LineSegments(edges, lineMaterial);
     mesh.add(lineSegments);
@@ -271,40 +257,36 @@ export class PathGenerator {
       zPosition: zPos,
       spawnTime: animate ? Date.now() : 0,
       isAnimating: animate,
+      isAccent: isAccent,
     });
   }
 
   update(playerZ: number): void {
     const playerDistance = Math.abs(playerZ);
     
-    // Animate spawning tiles
     const now = Date.now();
     this.tiles.forEach(tile => {
       if (tile.isAnimating) {
         const elapsed = now - tile.spawnTime;
         const progress = Math.min(elapsed / this.SPAWN_DURATION, 1);
         
-        // Smooth ease-out cubic for drop animation
         const easeProgress = 1 - Math.pow(1 - progress, 3);
         
-        // Animate Y position (drop down)
         const startY = this.TILE_Y_POSITION + this.SPAWN_HEIGHT;
         const endY = this.TILE_Y_POSITION;
         tile.mesh.position.y = startY + (endY - startY) * easeProgress;
         
-        // Animate opacity (fade in)
         if (tile.mesh.material instanceof THREE.MeshStandardMaterial) {
           tile.mesh.material.opacity = easeProgress;
         }
         
-        // Animate edge opacity
+        const targetEdgeOpacity = tile.isAccent ? 0.7 : 0.4;
         tile.mesh.children.forEach(child => {
           if (child instanceof THREE.LineSegments && child.material instanceof THREE.LineBasicMaterial) {
-            child.material.opacity = 0.4 * easeProgress;
+            child.material.opacity = targetEdgeOpacity * easeProgress;
           }
         });
         
-        // Animation complete
         if (progress >= 1) {
           tile.isAnimating = false;
           if (tile.mesh.material instanceof THREE.MeshStandardMaterial) {
@@ -315,7 +297,6 @@ export class PathGenerator {
       }
     });
     
-    // Batch cleanup
     const tilesToRemove: TileData[] = [];
     
     this.tiles = this.tiles.filter(tile => {
@@ -340,11 +321,8 @@ export class PathGenerator {
       });
     });
     
-    // CONTINUOUS GENERATION: Generate row by row as player advances
-    // This creates the "integral" effect - smooth continuous spawning
-    // BUFFER: Always keep 2 extra rows ahead of generation for seamless visual
-    while (this.furthestZ < playerDistance + 44) { // +4 units extra (2 tile rows)
-      this.generateNextRowContinuous();
+    while (this.furthestZ < playerDistance + 44) {
+      this.generateNextRowOrganic();
     }
   }
 
@@ -440,8 +418,8 @@ export class PathGenerator {
     this.tiles = [];
     this.furthestZ = 0;
     this.lastGeneratedLanes = [true, true, true];
-    this.consecutiveStraightRows = 0;
-    this.patternQueue = [];
-    this.currentPatternIndex = 0;
+    this.consecutiveSameConfig = 0;
+    this.recentConfigurations = [];
+    this.distanceTraveled = 0;
   }
 }

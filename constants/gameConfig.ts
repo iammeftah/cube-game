@@ -11,7 +11,6 @@ export const GAME_CONFIG = {
     PLAYING_LOOK_AT: new THREE.Vector3(0, 0, -5),
     ORBIT_RADIUS: 16,
     ORBIT_SPEED: 0.0015,
-    // PERFORMANCE FIX: Slightly increased smoothness for more stable following
     FOLLOW_SMOOTHNESS: 0.12,
   },
 
@@ -38,17 +37,20 @@ export const GAME_CONFIG = {
     GROUND_OFFSET: 0.5,
     FALL_THRESHOLD: -20,
     DROP_DURATION: 800,
-    // PERFORMANCE FIX: Use exact value that divides evenly into frame time
     FORWARD_SPEED: 0.12,
-    GRAVITY: 0.032,
-    JUMP_FORCE: 0.65,
     ROTATION_SPEED: 0.003,
-    // PERFORMANCE FIX: Disabled bounce for cleaner motion
     BOUNCE_SPEED: 2.0,
     BOUNCE_AMPLITUDE: 0.15,
-    // PERFORMANCE FIX: Slightly faster lane switching for more responsive feel
-    LANE_SWITCH_SPEED: 0.2,
+    LANE_SWITCH_SPEED: 0.20, // Increased from 0.18 for smoother transitions
+    JUMP_FORCE: 0.68, // Slightly higher for better feel
+    GRAVITY: 0.030, // Slightly lower for floatier jump
     LANE_SPACING: 2.5,
+    FAST_FALL_SPEED: 0.5, // NEW: Speed when swiping down while in air
+    
+    // BOOST CONFIGURATION (EDITABLE)
+    BOOST_DURATION: 2000,
+    BOOST_SPEED_MULTIPLIER: 5,
+    BOOST_PARTICLE_COUNT: 10,
   },
 
   PATH: {
@@ -65,7 +67,6 @@ export const GAME_CONFIG = {
     HEIGHT_FREQUENCY: 0,
     GAP_CHANCE: 0.2,
     MIN_GAP_DISTANCE: 10,
-    // PERFORMANCE FIX: Exact Y position - never changes
     TILE_Y_POSITION: -1.0,
     TILE_HEIGHT: 0.6,
     TILE_COLOR: 0x2a2a2a,
@@ -85,6 +86,22 @@ export const GAME_CONFIG = {
     SPREAD_Z: 90,
   },
 
+  BOOST_PARTICLES: {
+    SPAWN_RATE: 40, // Spawn particles every 50ms instead of every frame
+    SIZE: 0.02,
+    SIZE_VARIANCE: 0.015,
+    BASE_COLORS: [0xff6b35, 0xf7931e, 0xfdc830, 0x00d4ff, 0xff3cac],
+    EMISSIVE_INTENSITY: 0.6,
+    LIFETIME: 400,
+    SPAWN_OFFSET_BEHIND: 0.2,
+    INITIAL_VELOCITY: 0.15,
+    DRAG_COEFFICIENT: 0.92,
+    TURBULENCE: 0.015,
+    GRAVITY_EFFECT: -0.003,
+    SPREAD_RADIUS: 0.3,
+    MAX_PARTICLES: 30, // Limit total particles at once
+  },
+
   ANIMATION: {
     TRANSITION_DURATION: 1800,
     FADE_IN_DURATION: 1000,
@@ -94,5 +111,6 @@ export const GAME_CONFIG = {
 
   GAMEPLAY: {
     INITIAL_PLAYER_POSITION: 0,
+    DOUBLE_TAP_THRESHOLD: 300, // milliseconds between taps
   },
 } as const;
